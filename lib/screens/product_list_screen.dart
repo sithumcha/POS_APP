@@ -310,6 +310,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                     children: [
                                       Text(
                                         name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.bold,
@@ -319,10 +321,15 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                       const SizedBox(height: 2),
                                       Text(
                                         'SKU: $sku',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                                       ),
                                       const SizedBox(height: 6),
-                                      Row(
+                                      Wrap(
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        spacing: 6,
+                                        runSpacing: 4,
                                         children: [
                                           // Price
                                           if (discountPrice != null) ...[
@@ -334,7 +341,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                                 color: Colors.black,
                                               ),
                                             ),
-                                            const SizedBox(width: 6),
                                             Text(
                                               'LKR ${basePrice.toStringAsFixed(0)}',
                                               style: const TextStyle(
@@ -352,7 +358,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                                 color: Colors.black,
                                               ),
                                             ),
-                                          const SizedBox(width: 10),
 
                                           // Stock Badge
                                           Container(

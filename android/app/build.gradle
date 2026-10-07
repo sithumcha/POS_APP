@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.posapp.pos_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -31,6 +31,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            packagingOptions {
+                doNotStrip "**/*.so"
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
