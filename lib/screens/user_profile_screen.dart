@@ -24,7 +24,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   final ApiService _apiService = ApiService();
   final NotificationService _notificationService = NotificationService();
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   Map<String, dynamic> _userData = {};
 
   // Settings State Toggles
@@ -39,14 +39,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _lowStockNotifications = _notificationService.lowStockEnabled;
     _orderSoundAlerts = _notificationService.orderChimeEnabled;
     _promoAlerts = _notificationService.promoAlertsEnabled;
+    
+    // Initial fallback data for instant screen render
+    _userData = {
+      'first_name': 'Cashier',
+      'last_name': 'User',
+      'email': widget.userEmail,
+      'role': 'Store Manager',
+      'store_name': widget.storeName,
+    };
+
     _fetchUserProfile();
   }
 
   Future<void> _fetchUserProfile() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
       final data = await _apiService.getUserDetail();
       if (!mounted) return;
@@ -57,13 +63,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _userData = {
-          'first_name': 'Admin',
-          'last_name': 'Manager',
-          'email': widget.userEmail,
-          'role': 'Store Admin',
-          'store_name': widget.storeName,
-        };
         _isLoading = false;
       });
     }

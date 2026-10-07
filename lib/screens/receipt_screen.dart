@@ -232,191 +232,189 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    children: [
-                      // Store Logo & Header
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: const BoxDecoration(
-                          color: Colors.black,
-                          shape: BoxShape.circle,
+                child: ClipPath(
+                  clipper: ReceiptPaperClipper(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAFAFA),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
-                        child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
-                      ),
-                      const SizedBox(height: 10),
-
-                      Text(
-                        widget.storeName.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.0,
-                          color: Colors.black,
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        // Store Logo & Header
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const BoxDecoration(
+                            color: Colors.black,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '123 Main Street, Colombo 03, Sri Lanka\nTel: +94 11 234 5678',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 10),
 
-                      _buildDottedDivider(),
-                      const SizedBox(height: 12),
+                        Text(
+                          widget.storeName.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          '123 Main Street, Colombo 03, Sri Lanka\nTel: +94 11 234 5678',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
+                        ),
+                        const SizedBox(height: 16),
 
-                      // Receipt Metadata Row
-                      _buildMetaRow('Receipt No:', _invNum),
-                      const SizedBox(height: 4),
-                      _buildMetaRow('Date & Time:', formattedDate),
-                      const SizedBox(height: 4),
-                      _buildMetaRow('Cashier:', widget.cashierName),
-                      const SizedBox(height: 12),
+                        _buildDottedDivider(),
+                        const SizedBox(height: 12),
 
-                      _buildDottedDivider(),
-                      const SizedBox(height: 14),
+                        // Receipt Metadata Row
+                        _buildMetaRow('Receipt No:', _invNum),
+                        const SizedBox(height: 4),
+                        _buildMetaRow('Date & Time:', formattedDate),
+                        const SizedBox(height: 4),
+                        _buildMetaRow('Cashier:', widget.cashierName),
+                        const SizedBox(height: 12),
 
-                      // Itemized Table Header
-                      const Row(
-                        children: [
-                          Expanded(flex: 5, child: Text('ITEM', style: _receiptHeaderStyle)),
-                          Expanded(flex: 2, child: Text('QTY x PRICE', textAlign: TextAlign.center, style: _receiptHeaderStyle)),
-                          Expanded(flex: 3, child: Text('TOTAL', textAlign: TextAlign.right, style: _receiptHeaderStyle)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+                        _buildDottedDivider(),
+                        const SizedBox(height: 14),
 
-                      // Itemized Products Rows
-                      ...widget.orderItems.map((item) {
-                        final String name = item['name'] ?? 'Item';
-                        final int qty = (item['quantity'] as num? ?? 1).toInt();
-                        final double unitPrice = ((item['unit_price'] ?? item['price'] ?? 0.0) as num).toDouble();
-                        final double total = item.containsKey('total_price')
-                            ? (item['total_price'] as num).toDouble()
-                            : (unitPrice * qty);
+                        // Itemized Table Header
+                        const Row(
+                          children: [
+                            Expanded(flex: 5, child: Text('ITEM', style: _receiptHeaderStyle)),
+                            Expanded(flex: 2, child: Text('QTY x PRICE', textAlign: TextAlign.center, style: _receiptHeaderStyle)),
+                            Expanded(flex: 3, child: Text('TOTAL', textAlign: TextAlign.right, style: _receiptHeaderStyle)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
 
-                        final dynamic vars = item['variations'];
-                        String varText = '';
-                        if (vars is Map && vars.isNotEmpty) {
-                          varText = vars.values.map((v) => v is List ? v.join(', ') : v.toString()).join(', ');
-                        }
+                        // Itemized Products Rows
+                        ...widget.orderItems.map((item) {
+                          final String name = item['name'] ?? 'Item';
+                          final int qty = (item['quantity'] as num? ?? 1).toInt();
+                          final double unitPrice = ((item['unit_price'] ?? item['price'] ?? 0.0) as num).toDouble();
+                          final double total = item.containsKey('total_price')
+                              ? (item['total_price'] as num).toDouble()
+                              : (unitPrice * qty);
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 5,
-                                    child: Text(
-                                      name,
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black),
+                          final dynamic vars = item['variations'];
+                          String varText = '';
+                          if (vars is Map && vars.isNotEmpty) {
+                            varText = vars.values.map((v) => v is List ? v.join(', ') : v.toString()).join(', ');
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 5,
+                                      child: Text(
+                                        name,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black),
+                                      ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Text(
-                                      '$qty x ${unitPrice.toStringAsFixed(0)}',
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        '$qty x ${unitPrice.toStringAsFixed(0)}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                      ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    flex: 3,
-                                    child: Text(
-                                      total.toStringAsFixed(2),
-                                      textAlign: TextAlign.right,
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        total.toStringAsFixed(2),
+                                        textAlign: TextAlign.right,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              if (varText.isNotEmpty)
-                                Text(
-                                  '  • $varText',
-                                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                  ],
                                 ),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 14),
+                                if (varText.isNotEmpty)
+                                  Text(
+                                    '  • $varText',
+                                    style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 14),
 
-                      _buildDottedDivider(),
-                      const SizedBox(height: 12),
+                        _buildDottedDivider(),
+                        const SizedBox(height: 12),
 
-                      // Billing Summary Section
-                      _buildSummaryRow('Subtotal:', 'LKR ${widget.subtotal.toStringAsFixed(2)}'),
-                      if (widget.discountAmount > 0) ...[
-                        const SizedBox(height: 4),
-                        _buildSummaryRow('Discount:', '- LKR ${widget.discountAmount.toStringAsFixed(2)}', isRed: true),
-                      ],
-                      const SizedBox(height: 4),
-                      _buildSummaryRow('Tax (0%):', 'LKR 0.00'),
-                      const SizedBox(height: 10),
-
-                      // Grand Total Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'GRAND TOTAL:',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.black),
-                          ),
-                          Text(
-                            'LKR ${widget.grandTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.black),
-                          ),
+                        // Billing Summary Section
+                        _buildSummaryRow('Subtotal:', 'LKR ${widget.subtotal.toStringAsFixed(2)}'),
+                        if (widget.discountAmount > 0) ...[
+                          const SizedBox(height: 4),
+                          _buildSummaryRow('Discount:', '- LKR ${widget.discountAmount.toStringAsFixed(2)}', isRed: true),
                         ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      _buildDottedDivider(),
-                      const SizedBox(height: 12),
-
-                      // Payment Info
-                      _buildMetaRow('Payment Mode:', widget.paymentMethod),
-                      if (widget.paymentMethod == 'Cash') ...[
                         const SizedBox(height: 4),
-                        _buildMetaRow('Cash Tendered:', 'LKR ${widget.cashTendered.toStringAsFixed(2)}'),
-                        const SizedBox(height: 4),
-                        _buildMetaRow('Change Returned:', 'LKR ${widget.changeDue.toStringAsFixed(2)}', isHighlight: true),
+                        _buildSummaryRow('Tax (0%):', 'LKR 0.00'),
+                        const SizedBox(height: 10),
+
+                        // Grand Total Row
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'GRAND TOTAL:',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.black),
+                            ),
+                            Text(
+                              'LKR ${widget.grandTotal.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.black),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        _buildDottedDivider(),
+                        const SizedBox(height: 12),
+
+                        // Payment Info
+                        _buildMetaRow('Payment Mode:', widget.paymentMethod),
+                        if (widget.paymentMethod == 'Cash') ...[
+                          const SizedBox(height: 4),
+                          _buildMetaRow('Cash Tendered:', 'LKR ${widget.cashTendered.toStringAsFixed(2)}'),
+                          const SizedBox(height: 4),
+                          _buildMetaRow('Change Returned:', 'LKR ${widget.changeDue.toStringAsFixed(2)}', isHighlight: true),
+                        ],
+                        const SizedBox(height: 16),
+
+                        _buildDottedDivider(),
+                        const SizedBox(height: 16),
+
+                        // Footer Note & Barcode Representation
+                        const Text(
+                          'Thank you for shopping with us!\n*** Please come again ***',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
+                        ),
+                        const SizedBox(height: 16),
+                        BarcodeWidget(code: _invNum),
+                        const SizedBox(height: 8),
                       ],
-                      const SizedBox(height: 16),
-
-                      _buildDottedDivider(),
-                      const SizedBox(height: 16),
-
-                      // Footer Note & Barcode Representation
-                      const Text(
-                        'Thank you for shopping with us!\n*** Please come again ***',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
-                      ),
-                      const SizedBox(height: 14),
-                      const Icon(Icons.qr_code_2_rounded, size: 64, color: Colors.black),
-                      const SizedBox(height: 4),
-                      Text(
-                        _invNum,
-                        style: const TextStyle(fontSize: 10, letterSpacing: 2, color: AppColors.textMuted),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -542,3 +540,87 @@ const TextStyle _receiptHeaderStyle = TextStyle(
   letterSpacing: 0.5,
   color: Colors.black,
 );
+
+class ReceiptPaperClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    const double teethWidth = 8.0;
+    const double teethHeight = 5.0;
+
+    path.moveTo(0, teethHeight);
+
+    // Top jagged teeth
+    double x = 0;
+    bool up = true;
+    while (x < size.width) {
+      x += teethWidth;
+      path.lineTo(x > size.width ? size.width : x, up ? 0 : teethHeight);
+      up = !up;
+    }
+
+    path.lineTo(size.width, size.height - teethHeight);
+
+    // Bottom jagged teeth
+    x = size.width;
+    up = true;
+    while (x > 0) {
+      x -= teethWidth;
+      path.lineTo(x < 0 ? 0 : x, up ? size.height : size.height - teethHeight);
+      up = !up;
+    }
+
+    path.lineTo(0, teethHeight);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+class BarcodeWidget extends StatelessWidget {
+  final String code;
+  final double height;
+
+  const BarcodeWidget({
+    super.key,
+    required this.code,
+    this.height = 42,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final barWidths = [3, 1, 2, 4, 1, 3, 1, 2, 4, 2, 1, 3, 1, 4, 2, 1, 3, 1, 2, 4, 1, 3, 2, 1];
+    return Column(
+      children: [
+        SizedBox(
+          height: height,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(barWidths.length, (index) {
+              final isBlack = index % 2 == 0;
+              return Container(
+                width: barWidths[index] * 1.6,
+                height: height,
+                margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                color: isBlack ? Colors.black : Colors.transparent,
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          code,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2.5,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+}

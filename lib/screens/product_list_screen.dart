@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/product_image_widget.dart';
 import 'product_form_screen.dart';
 
 class ProductListScreen extends StatefulWidget {
@@ -293,25 +294,12 @@ class _ProductListScreenState extends State<ProductListScreen> {
                             ),
                             child: Row(
                               children: [
-                                // Thumbnail Image Container
-                                Container(
+                                ProductImageWidget(
+                                  imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
+                                  productName: name,
                                   width: 60,
                                   height: 60,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: item['main_image'] != null
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Image.network(
-                                            item['main_image'],
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => const Icon(Icons.coffee_rounded, color: AppColors.textMuted),
-                                          ),
-                                        )
-                                      : const Icon(Icons.coffee_rounded, size: 28, color: AppColors.textMuted),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 const SizedBox(width: 14),
 

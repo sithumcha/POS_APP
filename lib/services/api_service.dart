@@ -80,13 +80,15 @@ class ApiService {
 
   /// GET /users/detail (Get logged-in user profile details)
   Future<Map<String, dynamic>> getUserDetail() async {
+    final savedUser = await getUserInfo();
+
     if (!ApiConfig.useMockApi) {
       try {
         final headers = await _headers();
         final res = await http.get(
           Uri.parse('$baseUrl/users/detail'),
           headers: headers,
-        );
+        ).timeout(const Duration(milliseconds: 2000));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           if (data is Map<String, dynamic>) {
@@ -102,8 +104,6 @@ class ApiService {
       } catch (_) {}
     }
 
-    // Return real logged-in user data saved during login/session
-    final savedUser = await getUserInfo();
     if (savedUser != null) {
       return savedUser;
     }
@@ -212,7 +212,7 @@ class ApiService {
         final res = await http.get(
           Uri.parse('$baseUrl/categories'),
           headers: await _headers(),
-        );
+        ).timeout(const Duration(milliseconds: 2500));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           if (data is List) return data;
@@ -348,7 +348,7 @@ class ApiService {
       try {
         String endpoint = '$baseUrl/subcategories';
         if (categoryId != null) endpoint += '?categoryId=$categoryId';
-        final res = await http.get(Uri.parse(endpoint), headers: await _headers());
+        final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 2500));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           if (data is List) return data;
@@ -488,7 +488,7 @@ class ApiService {
         if (subCategoryId != null) params.add('subCategoryId=$subCategoryId');
         if (params.isNotEmpty) endpoint += '?${params.join('&')}';
 
-        final res = await http.get(Uri.parse(endpoint), headers: await _headers());
+        final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 2500));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           if (data is List) return data;
@@ -620,10 +620,9 @@ class ApiService {
         "featured": false,
         "short_description": "Ergonomic wireless mouse",
         "full_description": "2.4GHz optical wireless mouse with USB receiver",
-        "main_image": "/files/mouse.png",
+        "main_image": "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500",
         "images": [
-          "/files/mouse_front.png",
-          "/files/mouse_back.png"
+          "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500"
         ],
         "tags": ["electronics", "accessories"],
         "variations": []
@@ -641,8 +640,8 @@ class ApiService {
         "featured": true,
         "short_description": "6.7 inch OLED 5G smartphone",
         "full_description": "Ultra high resolution smartphone with triple lens camera and 5000mAh battery",
-        "main_image": "/files/smartphones.png",
-        "images": ["/files/smartphones.png"],
+        "main_image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500",
+        "images": ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500"],
         "tags": ["mobile", "5g"],
         "variations": []
       },
@@ -659,9 +658,63 @@ class ApiService {
         "featured": true,
         "short_description": "Freshly roasted coffee beans",
         "full_description": "Rich dark roast arabica coffee beans ethically sourced",
-        "main_image": "/files/coffee.png",
-        "images": ["/files/coffee.png"],
+        "main_image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500",
+        "images": ["https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500"],
         "tags": ["beverage", "coffee"],
+        "variations": []
+      },
+      {
+        "id": 4,
+        "category_id": 2,
+        "subcategory_id": 3,
+        "name": "Organic Ceylon Tea",
+        "sku": "TEA-004",
+        "price": 850.0,
+        "discount_price": 750.0,
+        "stock": 25,
+        "status": "active",
+        "featured": false,
+        "short_description": "Pure Ceylon black tea",
+        "full_description": "Hand-picked Ceylon tea leaves from Nuwara Eliya estates",
+        "main_image": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500",
+        "images": ["https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500"],
+        "tags": ["beverage", "tea"],
+        "variations": []
+      },
+      {
+        "id": 5,
+        "category_id": 3,
+        "subcategory_id": null,
+        "name": "Butter Croissant",
+        "sku": "BAK-005",
+        "price": 450.0,
+        "discount_price": null,
+        "stock": 18,
+        "status": "active",
+        "featured": false,
+        "short_description": "Flaky French butter croissant",
+        "full_description": "Freshly baked daily with authentic French butter",
+        "main_image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500",
+        "images": ["https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500"],
+        "tags": ["bakery", "pastry"],
+        "variations": []
+      },
+      {
+        "id": 6,
+        "category_id": 1,
+        "subcategory_id": 2,
+        "name": "Mechanical Keyboard",
+        "sku": "KB-006",
+        "price": 8500.0,
+        "discount_price": 7900.0,
+        "stock": 4,
+        "status": "active",
+        "featured": true,
+        "short_description": "RGB Mechanical Gaming Keyboard",
+        "full_description": "Tactile mechanical switches with customizable RGB backlight",
+        "main_image": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500",
+        "images": ["https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500"],
+        "tags": ["electronics", "gaming"],
         "variations": []
       }
     ];

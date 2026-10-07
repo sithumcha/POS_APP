@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'product_image_widget.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final Map<String, dynamic> productSummary;
@@ -173,25 +174,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // --- 1. FULL PRODUCT IMAGE PREVIEW CONTAINER ---
-                    Container(
+                    ProductImageWidget(
+                      imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
+                      productName: name,
                       width: double.infinity,
                       height: 180,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: item['main_image'] != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.network(
-                                item['main_image'],
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
-                              ),
-                            )
-                          : _buildImagePlaceholder(),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     const SizedBox(height: 16),
 
@@ -431,21 +419,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
   }
 
-  Widget _buildImagePlaceholder() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.coffee_rounded, size: 56, color: AppColors.textMuted),
-          SizedBox(height: 8),
-          Text(
-            'Product Preview Image',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildVariationGroup(Map<String, dynamic> v) {
     final String groupName = v['name'] ?? 'Variation';

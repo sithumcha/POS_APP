@@ -486,23 +486,25 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
                                 // Quick Amount Presets
                                 Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
+                                  spacing: 8,
+                                  runSpacing: 8,
                                   children: [
-                                    _buildPresetChip('Exact (${_grandTotal.toStringAsFixed(0)})', _grandTotal.toStringAsFixed(0)),
-                                    _buildPresetChip('1,000', '1000'),
-                                    _buildPresetChip('2,000', '2000'),
-                                    _buildPresetChip('5,000', '5000'),
+                                    _buildPresetChip('Exact Cash (LKR ${_grandTotal.toStringAsFixed(0)})', _grandTotal.toStringAsFixed(0), isPrimary: true),
+                                    _buildPresetChip('+ LKR 500', '500'),
+                                    _buildPresetChip('+ LKR 1,000', '1000'),
+                                    _buildPresetChip('+ LKR 2,000', '2000'),
+                                    _buildPresetChip('+ LKR 5,000', '5000'),
                                   ],
                                 ),
                                 const SizedBox(height: 14),
 
-                                // Numeric Keypad
+                                // Numeric Keypad Modal
                                 Container(
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
                                   ),
                                   child: Column(
                                     children: [
@@ -513,7 +515,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                           _buildNumKey('3'),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 8),
                                       Row(
                                         children: [
                                           _buildNumKey('4'),
@@ -521,7 +523,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                           _buildNumKey('6'),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 8),
                                       Row(
                                         children: [
                                           _buildNumKey('7'),
@@ -529,10 +531,10 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                           _buildNumKey('9'),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 8),
                                       Row(
                                         children: [
-                                          _buildNumKey('00'),
+                                          _buildNumKey('C', isAction: true),
                                           _buildNumKey('0'),
                                           _buildNumKey('⌫', isAction: true),
                                         ],
@@ -540,17 +542,29 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 14),
 
                                 // Live Change Balance Display Card
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                   decoration: BoxDecoration(
-                                    color: _changeDue >= 0 ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: _changeDue >= 0 ? const Color(0xFFA7F3D0) : const Color(0xFFFFEDD5),
+                                    gradient: LinearGradient(
+                                      colors: _changeDue >= 0
+                                          ? [const Color(0xFFECFDF5), const Color(0xFFD1FAE5)]
+                                          : [const Color(0xFFFFF7ED), const Color(0xFFFFEDD5)],
                                     ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: _changeDue >= 0 ? const Color(0xFF34D399) : const Color(0xFFFDBA74),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (_changeDue >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -558,13 +572,13 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                       Row(
                                         children: [
                                           Icon(
-                                            _changeDue >= 0 ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
-                                            size: 18,
+                                            _changeDue >= 0 ? Icons.check_circle_rounded : Icons.pending_rounded,
+                                            size: 22,
                                             color: _changeDue >= 0 ? const Color(0xFF047857) : const Color(0xFFC2410C),
                                           ),
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: 10),
                                           Text(
-                                            _changeDue >= 0 ? 'Change Balance Due:' : 'Remaining Balance:',
+                                            _changeDue >= 0 ? 'Change Balance Due:' : 'Remaining Cash Needed:',
                                             style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.bold,
@@ -576,7 +590,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                       Text(
                                         'LKR ${_changeDue.abs().toStringAsFixed(2)}',
                                         style: TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.w900,
                                           color: _changeDue >= 0 ? const Color(0xFF047857) : const Color(0xFFC2410C),
                                         ),
@@ -712,24 +726,37 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     );
   }
 
-  Widget _buildPresetChip(String label, String value) {
+  Widget _buildPresetChip(String label, String value, {bool isPrimary = false}) {
     return InkWell(
       onTap: () {
         setState(() {
           _cashTenderedInput = value;
         });
       },
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFCBD5E1)),
+          color: isPrimary ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isPrimary ? Colors.black : const Color(0xFFCBD5E1)),
+          boxShadow: isPrimary
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: isPrimary ? Colors.white : Colors.black,
+          ),
         ),
       ),
     );
@@ -738,24 +765,31 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   Widget _buildNumKey(String text, {bool isAction = false}) {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         child: InkWell(
           onTap: () => _handleNumPadInput(text),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
               color: isAction ? const Color(0xFFE2E8F0) : Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isAction ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Text(
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: isAction ? AppColors.error : Colors.black,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                color: isAction ? (text == 'C' ? const Color(0xFFDC2626) : const Color(0xFF0F172A)) : Colors.black,
               ),
             ),
           ),

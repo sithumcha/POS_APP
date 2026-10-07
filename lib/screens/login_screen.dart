@@ -164,402 +164,371 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFFAFAFA),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // --- 1. BRAND HEADER ---
-                    Center(
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.12),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
+              child: Column(
+                children: [
+                  // --- 1. HERO BRAND BANNER ---
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.storefront_rounded,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  const Text(
+                    'QUICKE POS',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Smart Cloud Point of Sale System',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Server Status Indicator Badge
+                  const Center(
+                    child: ServerStatusBadge(),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // --- 2. WHITE CARD FORM CONTAINER ---
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // --- .ENV PRESET LOGINS (ADMIN & CASHIER) ---
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Quick Demo Login Presets',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => _selectPresetRole('admin'),
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 150),
+                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                                            decoration: BoxDecoration(
+                                              color: _selectedPresetRole == 'admin' ? Colors.black : Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: _selectedPresetRole == 'admin' ? Colors.black : const Color(0xFFCBD5E1),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.admin_panel_settings_rounded,
+                                                      size: 16,
+                                                      color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      'Admin',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${EnvConfig.adminEmail}\nPass: ${EnvConfig.adminPassword}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: _selectedPresetRole == 'admin' ? Colors.white70 : AppColors.textMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => _selectPresetRole('cashier'),
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 150),
+                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                                            decoration: BoxDecoration(
+                                              color: _selectedPresetRole == 'cashier' ? Colors.black : Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: _selectedPresetRole == 'cashier' ? Colors.black : const Color(0xFFCBD5E1),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.point_of_sale_rounded,
+                                                      size: 16,
+                                                      color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      'Cashier',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${EnvConfig.cashierEmail}\nPass: ${EnvConfig.cashierPassword}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: _selectedPresetRole == 'cashier' ? Colors.white70 : AppColors.textMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+
+                            // --- TABS TOGGLE (Sign In vs Register) ---
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _selectedTabMode = 0),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 150),
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: _selectedTabMode == 0 ? Colors.black : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          'Sign In',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: _selectedTabMode == 0 ? Colors.white : Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _selectedTabMode = 1),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 150),
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: _selectedTabMode == 1 ? Colors.black : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          'Register',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: _selectedTabMode == 1 ? Colors.white : Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+
+                            // --- FORM FIELDS ---
+                            if (_selectedTabMode == 1) ...[
+                              // First Name
+                              const Text('First Name', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _firstNameController,
+                                textCapitalization: TextCapitalization.words,
+                                enabled: !_isLoading,
+                                decoration: const InputDecoration(hintText: 'John'),
+                                validator: (val) => (_selectedTabMode == 1 && (val == null || val.trim().isEmpty))
+                                    ? 'Please enter your first name'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Last Name
+                              const Text('Last Name', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _lastNameController,
+                                textCapitalization: TextCapitalization.words,
+                                enabled: !_isLoading,
+                                decoration: const InputDecoration(hintText: 'Doe'),
+                                validator: (val) => (_selectedTabMode == 1 && (val == null || val.trim().isEmpty))
+                                    ? 'Please enter your last name'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+
+                            // Email Address
+                            const Text('Email Address', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              enabled: !_isLoading,
+                              decoration: const InputDecoration(hintText: 'cashier@pos.com'),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) return 'Please enter your email address';
+                                if (!val.contains('@')) return 'Please enter a valid email address';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Password
+                            const Text('Password', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                hintText: '••••••••',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                ),
+                              ),
+                              validator: (val) => (val == null || val.trim().isEmpty) ? 'Please enter your password' : null,
+                              onFieldSubmitted: (_) => _handleSubmit(),
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Submit Action Button
+                            ElevatedButton(
+                              onPressed: _isLoading ? null : _handleSubmit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                minimumSize: const Size.fromHeight(52),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 22,
+                                      width: 22,
+                                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                    )
+                                  : Text(
+                                      _selectedTabMode == 0 ? 'Sign In to POS' : 'Create Account',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Security note
+                            const Text(
+                              '🔒 Secured with JWT & Encrypted Local Storage',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.storefront_outlined,
-                          size: 40,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      'POS Mobile App',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Server Status Indicator Badge
-                    const Center(
-                      child: ServerStatusBadge(),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // --- .ENV PRESET LOGINS (ADMIN & CASHIER) ---
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.tune_rounded, size: 16, color: Colors.black),
-                              SizedBox(width: 6),
-                              Text(
-                                '',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => _selectPresetRole('admin'),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: _selectedPresetRole == 'admin' ? Colors.black : Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: _selectedPresetRole == 'admin' ? Colors.black : const Color(0xFFCBD5E1),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.admin_panel_settings_outlined,
-                                              size: 16,
-                                              color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'Admin',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${EnvConfig.adminEmail}\nPass: ${EnvConfig.adminPassword}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: _selectedPresetRole == 'admin' ? Colors.white70 : AppColors.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => _selectPresetRole('cashier'),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: _selectedPresetRole == 'cashier' ? Colors.black : Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: _selectedPresetRole == 'cashier' ? Colors.black : const Color(0xFFCBD5E1),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.point_of_sale_outlined,
-                                              size: 16,
-                                              color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'Cashier',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${EnvConfig.cashierEmail}\nPass: ${EnvConfig.cashierPassword}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: _selectedPresetRole == 'cashier' ? Colors.white70 : AppColors.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // --- 2. TABS TOGGLE (Sign In vs Register New Account) ---
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedTabMode = 0;
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                padding: const EdgeInsets.symmetric(vertical: 11),
-                                decoration: BoxDecoration(
-                                  color: _selectedTabMode == 0 ? Colors.black : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  'Cashier Sign In',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: _selectedTabMode == 0 ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedTabMode = 1;
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                padding: const EdgeInsets.symmetric(vertical: 11),
-                                decoration: BoxDecoration(
-                                  color: _selectedTabMode == 1 ? Colors.black : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  'Register Account',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: _selectedTabMode == 1 ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // --- 3. FORM FIELDS ---
-                    if (_selectedTabMode == 1) ...[
-                      // First Name
-                      const Text(
-                        'First Name',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _firstNameController,
-                        textCapitalization: TextCapitalization.words,
-                        enabled: !_isLoading,
-                        decoration: const InputDecoration(
-                          hintText: 'John',
-                        ),
-                        validator: (val) {
-                          if (_selectedTabMode == 1 && (val == null || val.trim().isEmpty)) {
-                            return 'Please enter your first name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Last Name
-                      const Text(
-                        'Last Name',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _lastNameController,
-                        textCapitalization: TextCapitalization.words,
-                        enabled: !_isLoading,
-                        decoration: const InputDecoration(
-                          hintText: 'Doe',
-                        ),
-                        validator: (val) {
-                          if (_selectedTabMode == 1 && (val == null || val.trim().isEmpty)) {
-                            return 'Please enter your last name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Email Address
-                    const Text(
-                      'Email Address',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      enabled: !_isLoading,
-                      decoration: const InputDecoration(
-                        hintText: 'cashier@pos.com',
-                      ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Please enter your email address';
-                        }
-                        if (!val.contains('@')) {
-                          return 'Please enter a valid email address';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password with Show/Hide Eye Icon
-                    const Text(
-                      'Password',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      enabled: !_isLoading,
-                      decoration: InputDecoration(
-                        hintText: '••••••••',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                            color: AppColors.textMuted,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                        ),
-                      ),
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Please enter your password';
-                        }
-                        return null;
-                      },
-                      onFieldSubmitted: (_) => _handleSubmit(),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // --- 4. ACTION BUTTON ---
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _handleSubmit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              _selectedTabMode == 0 ? 'Sign In to POS' : 'Create Account',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Footer Encryption Security Note
-                    const Text(
-                      'Secured with JWT & Flutter Secure Storage',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -568,7 +537,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }

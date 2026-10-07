@@ -4,6 +4,9 @@ import '../theme/app_theme.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/cart_checkout_sheet.dart';
 import '../widgets/barcode_scanner_modal.dart';
+import '../widgets/product_image_widget.dart';
+import '../database/app_database.dart';
+import '../repositories/catalog_sync_repository.dart';
 import 'product_list_screen.dart';
 import 'category_setup_screen.dart';
 import 'user_profile_screen.dart';
@@ -24,6 +27,8 @@ class PosScreen extends StatefulWidget {
 
 class _PosScreenState extends State<PosScreen> {
   final ApiService _apiService = ApiService();
+  final AppDatabase _db = AppDatabase();
+  late final CatalogSyncRepository _catalogRepo = CatalogSyncRepository(apiService: _apiService, db: _db);
   final TextEditingController _searchController = TextEditingController();
 
   List<dynamic> _categories = [
@@ -32,7 +37,7 @@ class _PosScreenState extends State<PosScreen> {
       "user_id": 10,
       "name": "Electronics",
       "slug": "electronics",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1498049860654-af1a5c570f1a?w=400",
       "description": "Electronic items and gadgets",
       "status": "active"
     },
@@ -41,7 +46,7 @@ class _PosScreenState extends State<PosScreen> {
       "user_id": 10,
       "name": "Beverages",
       "slug": "beverages",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=400",
       "description": "Hot & Cold Drinks, Coffees, Teas",
       "status": "active"
     },
@@ -50,7 +55,7 @@ class _PosScreenState extends State<PosScreen> {
       "user_id": 10,
       "name": "Bakery & Snacks",
       "slug": "bakery-snacks",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400",
       "description": "Freshly baked items and snacks",
       "status": "active"
     },
@@ -62,7 +67,7 @@ class _PosScreenState extends State<PosScreen> {
       "category_id": 1,
       "name": "Smartphones",
       "slug": "smartphones",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400",
       "description": "Smartphones and mobile devices",
       "status": "active"
     },
@@ -71,7 +76,7 @@ class _PosScreenState extends State<PosScreen> {
       "category_id": 1,
       "name": "Computer Peripherals",
       "slug": "computer-peripherals",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=400",
       "description": "Mice, keyboards, and accessories",
       "status": "active"
     },
@@ -80,7 +85,7 @@ class _PosScreenState extends State<PosScreen> {
       "category_id": 2,
       "name": "Hot Coffee",
       "slug": "hot-coffee",
-      "image": null,
+      "image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400",
       "description": "Espresso, Latte, Cappuccino",
       "status": "active"
     },
@@ -100,8 +105,8 @@ class _PosScreenState extends State<PosScreen> {
       "featured": false,
       "short_description": "Ergonomic wireless mouse",
       "full_description": "2.4GHz optical wireless mouse with USB receiver",
-      "main_image": null,
-      "images": [],
+      "main_image": "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500",
+      "images": ["https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500"],
       "tags": ["electronics", "accessories"],
       "variations": []
     },
@@ -118,8 +123,8 @@ class _PosScreenState extends State<PosScreen> {
       "featured": true,
       "short_description": "6.7 inch OLED 5G smartphone",
       "full_description": "Ultra high resolution smartphone with triple lens camera",
-      "main_image": null,
-      "images": [],
+      "main_image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500",
+      "images": ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500"],
       "tags": ["mobile", "5g"],
       "variations": []
     },
@@ -136,8 +141,8 @@ class _PosScreenState extends State<PosScreen> {
       "featured": true,
       "short_description": "Freshly roasted coffee beans",
       "full_description": "Rich dark roast arabica coffee beans ethically sourced",
-      "main_image": null,
-      "images": [],
+      "main_image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500",
+      "images": ["https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500"],
       "tags": ["beverage", "coffee"],
       "variations": []
     },
@@ -154,8 +159,8 @@ class _PosScreenState extends State<PosScreen> {
       "featured": false,
       "short_description": "Pure Ceylon black tea",
       "full_description": "Hand-picked Ceylon tea leaves from Nuwara Eliya estates",
-      "main_image": null,
-      "images": [],
+      "main_image": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500",
+      "images": ["https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500"],
       "tags": ["beverage", "tea"],
       "variations": []
     },
@@ -172,8 +177,8 @@ class _PosScreenState extends State<PosScreen> {
       "featured": false,
       "short_description": "Flaky French butter croissant",
       "full_description": "Freshly baked daily with authentic French butter",
-      "main_image": null,
-      "images": [],
+      "main_image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500",
+      "images": ["https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500"],
       "tags": ["bakery", "pastry"],
       "variations": []
     },
@@ -218,13 +223,14 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _loadInitialData() async {
     try {
-      final categoriesData = await _apiService.getCategories();
-      final productsData = await _apiService.getProducts();
+      final categoriesData = await _catalogRepo.getCachedOrRemoteCategories();
+      final productsData = await _catalogRepo.getCachedOrRemoteProducts();
 
       if (!mounted) return;
       setState(() {
         _categories = categoriesData;
         _products = productsData;
+        _subcategories = []; // Clear mixed subcategories on initial All Items view
       });
     } catch (_) {}
   }
@@ -410,58 +416,93 @@ class _PosScreenState extends State<PosScreen> {
       bottomNavigationBar: _cartItems.isEmpty
           ? const SizedBox.shrink()
           : Container(
+              margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A).withOpacity(0.92),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.18), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: SafeArea(
+                top: false,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(
-                          '$_cartCount ${_cartCount == 1 ? 'Item' : 'Items'} in Cart',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            shape: BoxShape.circle,
                           ),
+                          child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 22),
                         ),
-                        Text(
-                          'LKR ${_cartTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        const SizedBox(width: 12),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: ScaleTransition(scale: anim, child: child)),
+                              child: Text(
+                                '$_cartCount ${_cartCount == 1 ? 'Item' : 'Items'} selected',
+                                key: ValueKey<int>(_cartCount),
+                                style: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                              child: Text(
+                                'LKR ${_cartTotal.toStringAsFixed(2)}',
+                                key: ValueKey<double>(_cartTotal),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                     Material(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       child: InkWell(
                         onTap: _openCheckoutSheet,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 22, vertical: 12),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.shopping_cart_checkout_rounded, size: 18, color: Colors.black),
-                              SizedBox(width: 8),
                               Text(
                                 'Checkout',
                                 style: TextStyle(
                                   color: Colors.black,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w900,
                                   fontSize: 14,
                                 ),
                               ),
+                              SizedBox(width: 6),
+                              Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.black),
                             ],
                           ),
                         ),
@@ -485,13 +526,31 @@ class _PosScreenState extends State<PosScreen> {
                       onChanged: (val) => setState(() => _searchQuery = val),
                       decoration: InputDecoration(
                         hintText: 'Search products or SKU...',
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                        fillColor: const Color(0xFFF3F4F6),
+                        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B)),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.cancel_rounded, color: Color(0xFF94A3B8), size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        fillColor: const Color(0xFFF1F5F9),
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: Colors.black, width: 1.5),
                         ),
                       ),
                     ),
@@ -527,7 +586,8 @@ class _PosScreenState extends State<PosScreen> {
               height: 44,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(left: 16, right: 32),
                 children: [
                   _buildChip('All Items', _selectedCategoryId == null, () => _onCategorySelected(null)),
                   ..._categories.map((cat) {
@@ -549,10 +609,11 @@ class _PosScreenState extends State<PosScreen> {
             // Subcategory Chips
             if (_subcategories.isNotEmpty) ...[
               SizedBox(
-                height: 38,
+                height: 42,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.only(left: 16, right: 32),
                   children: [
                     _buildSubChip(
                       'All Subcategories',
@@ -583,10 +644,10 @@ class _PosScreenState extends State<PosScreen> {
                   : filteredProducts.isEmpty
                       ? const Center(child: Text('No products available'))
                       : GridView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.76,
+                            childAspectRatio: 0.68,
                             crossAxisSpacing: 14,
                             mainAxisSpacing: 14,
                           ),
@@ -596,31 +657,143 @@ class _PosScreenState extends State<PosScreen> {
                             final double regular = _getCleanPrice(item['price'] ?? item['base_price']);
                             final double discount = _getCleanPrice(item['discount_price']);
                             final bool hasDiscount = discount > 0 && discount < regular;
+                            final bool isFeatured = item['featured'] == true;
+                            final int stock = (item['stock'] is num) ? (item['stock'] as num).toInt() : 0;
+                            final int discountPct = (hasDiscount && regular > 0)
+                                ? (((regular - discount) / regular) * 100).round()
+                                : 0;
 
                             return Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Product Image & Badges
                                   Expanded(
                                     child: GestureDetector(
                                       onTap: () => _openProductDetailSheet(item),
-                                      child: Container(
-                                        width: double.infinity,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFF9FAFB),
-                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                        ),
-                                        child: const Center(
-                                          child: Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey),
-                                        ),
+                                      child: Stack(
+                                        children: [
+                                          ProductImageWidget(
+                                            imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
+                                            productName: item['name'],
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                          ),
+                                          // Featured Badge Overlay (Top Left)
+                                          if (isFeatured)
+                                            Positioned(
+                                              top: 8,
+                                              left: 8,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  gradient: const LinearGradient(
+                                                    colors: [Color(0xFFFF5252), Color(0xFFFF7A00)],
+                                                  ),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.orange.withOpacity(0.4),
+                                                      blurRadius: 6,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text('🔥 ', style: TextStyle(fontSize: 10)),
+                                                    Text(
+                                                      'Featured',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+
+                                          // Discount Badge Overlay (Top Right)
+                                          if (hasDiscount && discountPct > 0)
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFDC2626),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.red.withOpacity(0.3),
+                                                      blurRadius: 6,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Text(
+                                                  '-$discountPct%',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w900,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+
+                                          // Stock Indicator Overlay (Bottom Left)
+                                          Positioned(
+                                            bottom: 8,
+                                            left: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: stock <= 0
+                                                    ? const Color(0xFFEF4444).withOpacity(0.9)
+                                                    : stock <= 5
+                                                        ? const Color(0xFFF59E0B).withOpacity(0.9)
+                                                        : Colors.black.withOpacity(0.75),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Text('📦 ', style: TextStyle(fontSize: 9)),
+                                                  Text(
+                                                    stock <= 0 ? 'Out of Stock' : 'Stock: $stock',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
+
+                                  // Details Section
                                   Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: Column(
@@ -637,16 +810,18 @@ class _PosScreenState extends State<PosScreen> {
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                               ),
+                                              const SizedBox(height: 2),
                                               Text(
                                                 'SKU: ${item['sku'] ?? 'N/A'}',
-                                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                                               ),
                                             ],
                                           ),
                                         ),
-                                        const SizedBox(height: 6),
+                                        const SizedBox(height: 8),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
                                             Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,26 +831,26 @@ class _PosScreenState extends State<PosScreen> {
                                                     'LKR ${regular.toStringAsFixed(0)}',
                                                     style: const TextStyle(
                                                       fontSize: 11,
-                                                      color: Colors.grey,
+                                                      color: Color(0xFF94A3B8),
                                                       decoration: TextDecoration.lineThrough,
                                                     ),
                                                   ),
                                                 Text(
                                                   'LKR ${(hasDiscount ? discount : regular).toStringAsFixed(0)}',
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.black),
                                                 ),
                                               ],
                                             ),
                                             Material(
                                               color: Colors.black,
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius: BorderRadius.circular(10),
                                               child: InkWell(
                                                 onTap: () => _addToCart(item),
-                                                borderRadius: BorderRadius.circular(8),
+                                                borderRadius: BorderRadius.circular(10),
                                                 child: const SizedBox(
-                                                  width: 32,
-                                                  height: 32,
-                                                  child: Icon(Icons.add, color: Colors.white, size: 18),
+                                                  width: 34,
+                                                  height: 34,
+                                                  child: Icon(Icons.add_rounded, color: Colors.white, size: 20),
                                                 ),
                                               ),
                                             ),
