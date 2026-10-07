@@ -1,0 +1,44 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Android related
+**/android/app/gradlew
+**/android/app/gradlew.bat
+**/android/local.properties
+**/android/key.properties
+**/android/app/open_in_android_studio.iml
+**/android/.gradle
+**/android/app/build
+**/android/app/captures
+
+# Flutter repo related
+/bin/cache/
+/bin/internal/ice_box
+/bin/mindsets.json
+
+# Flutter tool errors
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Web related
+lib/generated_plugin_registrant.dart

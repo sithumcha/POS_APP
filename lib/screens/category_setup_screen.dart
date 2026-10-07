@@ -1,0 +1,839 @@
+import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+
+class CategorySetupScreen extends StatefulWidget {
+  const CategorySetupScreen({super.key});
+
+  @override
+  State<CategorySetupScreen> createState() => _CategorySetupScreenState();
+}
+
+class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final ApiService _apiService = ApiService();
+
+  // Tab 1: Categories State
+  List<dynamic> _categories = [];
+  bool _isLoadingCategories = true;
+
+  // Tab 2: Subcategories State
+  List<dynamic> _subcategories = [];
+  bool _isLoadingSubcategories = true;
+
+  int? _selectedFilterParentCategoryId; // null = All Parent Categories
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadAllData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      _loadCategories(),
+      _loadSubcategories(),
+    ]);
+  }
+
+  // --- API: GET /categories ---
+  Future<void> _loadCategories() async {
+    setState(() {
+      _isLoadingCategories = true;
+    });
+    try {
+      final cats = await _apiService.getCategories();
+      if (!mounted) return;
+      setState(() {
+        _categories = cats;
+        _isLoadingCategories = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingCategories = false;
+      });
+    }
+  }
+
+  // --- API: GET /subcategories ---
+  Future<void> _loadSubcategories() async {
+    setState(() {
+      _isLoadingSubcategories = true;
+    });
+    try {
+      final subcats = await _apiService.getSubcategories(categoryId: _selectedFilterParentCategoryId);
+      if (!mounted) return;
+      setState(() {
+        _subcategories = subcats;
+        _isLoadingSubcategories = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSubcategories = false;
+      });
+    }
+  }
+
+  // --- API: DELETE /categories/{id} ---
+  Future<void> _deleteCategory(int id, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            SizedBox(width: 8),
+            Text('Delete Category', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Are you sure you want to delete category "$name"? Products inside this category may lose their mapping.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _apiService.deleteCategory(id);
+      if (success) {
+        setState(() {
+          _categories.removeWhere((c) => c['id'] == id);
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Category "$name" deleted.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // --- API: DELETE /subcategories/{id} ---
+  Future<void> _deleteSubcategory(int id, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            SizedBox(width: 8),
+            Text('Delete Subcategory', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Are you sure you want to delete subcategory "$name"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _apiService.deleteSubcategory(id);
+      if (success) {
+        setState(() {
+          _subcategories.removeWhere((s) => s['id'] == id);
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Subcategory "$name" deleted.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  bool _parseStatus(dynamic status) {
+    if (status == null) return true;
+    if (status is bool) return status;
+    if (status is String) {
+      final s = status.toLowerCase();
+      return s == 'active' || s == 'true' || s == '1';
+    }
+    if (status is num) return status == 1;
+    return true;
+  }
+
+  // --- API: POST /categories OR PUT /categories/{id} MODAL SHEET ---
+  void _showCategoryModalForm({Map<String, dynamic>? initialCategory}) {
+    final bool isEdit = initialCategory != null;
+    final nameCtrl = TextEditingController(text: isEdit ? initialCategory['name'] : '');
+    final slugCtrl = TextEditingController(text: isEdit ? (initialCategory['slug'] ?? '') : '');
+    final imageCtrl = TextEditingController(text: isEdit ? (initialCategory['image'] ?? '') : '');
+    final descCtrl = TextEditingController(text: isEdit ? (initialCategory['description'] ?? '') : '');
+    bool isActive = isEdit ? _parseStatus(initialCategory['status']) : true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Edit Category' : 'Add Category',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Category Name
+                  TextField(
+                    controller: nameCtrl,
+                    onChanged: (val) {
+                      if (!isEdit && slugCtrl.text.isEmpty) {
+                        slugCtrl.text = val.toLowerCase().replaceAll(' ', '-').replaceAll(RegExp(r'[^a-z0-9\-]'), '');
+                      }
+                    },
+                    decoration: const InputDecoration(labelText: 'Category Name *', hintText: 'e.g. Beverages'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Slug
+                  TextField(
+                    controller: slugCtrl,
+                    decoration: const InputDecoration(labelText: 'Slug *', hintText: 'e.g. beverages'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Image URL
+                  TextField(
+                    controller: imageCtrl,
+                    decoration: const InputDecoration(labelText: 'Image URL', hintText: 'https://example.com/category.jpg'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Description
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Description', hintText: 'Short category description...'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Status Toggle
+                  SwitchListTile(
+                    title: const Text('Active Status', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    value: isActive,
+                    activeColor: Colors.black,
+                    onChanged: (val) {
+                      setModalState(() {
+                        isActive = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  ElevatedButton(
+                    onPressed: () async {
+                      final name = nameCtrl.text.trim();
+                      if (name.isEmpty) return;
+
+                      final nav = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+
+                      final payload = {
+                        'name': name,
+                        'slug': slugCtrl.text.trim().isEmpty ? name.toLowerCase().replaceAll(' ', '-') : slugCtrl.text.trim(),
+                        'image': imageCtrl.text.trim(),
+                        'description': descCtrl.text.trim(),
+                        'status': isActive ? 'active' : 'inactive',
+                      };
+
+                      if (isEdit) {
+                        final id = initialCategory['id'] as int;
+                        await _apiService.updateCategory(id, payload);
+                        setState(() {
+                          initialCategory['name'] = name;
+                          initialCategory['slug'] = payload['slug'];
+                          initialCategory['image'] = payload['image'];
+                          initialCategory['status'] = isActive;
+                        });
+                      } else {
+                        await _apiService.createCategory(payload);
+                        setState(() {
+                          _categories.add({
+                            'id': DateTime.now().millisecondsSinceEpoch,
+                            ...payload,
+                          });
+                        });
+                      }
+
+                      nav.pop();
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(isEdit ? 'Category updated!' : 'Category created successfully!'),
+                          backgroundColor: AppColors.success,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(isEdit ? 'Update Category' : 'Save Category'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- API: POST /subcategories OR PUT /subcategories/{id} MODAL SHEET ---
+  void _showSubcategoryModalForm({Map<String, dynamic>? initialSubcategory}) {
+    final bool isEdit = initialSubcategory != null;
+    int? selectedParentId = isEdit
+        ? (initialSubcategory['categoryId'] ?? initialSubcategory['category_id'])
+        : (_categories.isNotEmpty ? _categories.first['id'] : null);
+
+    final nameCtrl = TextEditingController(text: isEdit ? initialSubcategory['name'] : '');
+    final slugCtrl = TextEditingController(text: isEdit ? (initialSubcategory['slug'] ?? '') : '');
+    final imageCtrl = TextEditingController(text: isEdit ? (initialSubcategory['image'] ?? '') : '');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Edit Subcategory' : 'Add Subcategory',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Parent Category Dropdown
+                  const Text('Parent Category *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<int>(
+                    value: selectedParentId,
+                    decoration: const InputDecoration(filled: true, fillColor: Color(0xFFF8FAFC)),
+                    items: _categories.map((c) {
+                      return DropdownMenuItem<int>(
+                        value: c['id'] as int,
+                        child: Text(c['name'] ?? 'Category'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setModalState(() {
+                        selectedParentId = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Subcategory Name
+                  TextField(
+                    controller: nameCtrl,
+                    onChanged: (val) {
+                      if (!isEdit && slugCtrl.text.isEmpty) {
+                        slugCtrl.text = val.toLowerCase().replaceAll(' ', '-').replaceAll(RegExp(r'[^a-z0-9\-]'), '');
+                      }
+                    },
+                    decoration: const InputDecoration(labelText: 'Subcategory Name *', hintText: 'e.g. Hot Drinks'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Slug
+                  TextField(
+                    controller: slugCtrl,
+                    decoration: const InputDecoration(labelText: 'Slug *', hintText: 'e.g. hot-drinks'),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Image URL
+                  TextField(
+                    controller: imageCtrl,
+                    decoration: const InputDecoration(labelText: 'Image URL', hintText: 'https://example.com/subcat.jpg'),
+                  ),
+                  const SizedBox(height: 20),
+
+                  ElevatedButton(
+                    onPressed: () async {
+                      final name = nameCtrl.text.trim();
+                      if (name.isEmpty || selectedParentId == null) return;
+
+                      final nav = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+
+                      final parentCat = _categories.firstWhere((c) => c['id'] == selectedParentId, orElse: () => {'name': ''});
+
+                      final payload = {
+                        'category_id': selectedParentId,
+                        'name': name,
+                        'slug': slugCtrl.text.trim().isEmpty ? name.toLowerCase().replaceAll(' ', '-') : slugCtrl.text.trim(),
+                        'image': imageCtrl.text.trim(),
+                        'description': name,
+                        'status': 'active',
+                      };
+
+                      if (isEdit) {
+                        final id = initialSubcategory['id'] as int;
+                        await _apiService.updateSubcategory(id, payload);
+                        setState(() {
+                          initialSubcategory['name'] = name;
+                          initialSubcategory['slug'] = payload['slug'];
+                          initialSubcategory['categoryId'] = selectedParentId;
+                          initialSubcategory['category_name'] = parentCat['name'];
+                        });
+                      } else {
+                        await _apiService.createSubcategory(payload);
+                        setState(() {
+                          _subcategories.add({
+                            'id': DateTime.now().millisecondsSinceEpoch,
+                            ...payload,
+                          });
+                        });
+                      }
+
+                      nav.pop();
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(isEdit ? 'Subcategory updated!' : 'Subcategory created successfully!'),
+                          backgroundColor: AppColors.success,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(isEdit ? 'Update Subcategory' : 'Save Subcategory'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Categories & Subcategories Setup',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 18),
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.black,
+          unselectedLabelColor: AppColors.textMuted,
+          indicatorColor: Colors.black,
+          indicatorWeight: 3,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          tabs: const [
+            Tab(text: 'Categories'),
+            Tab(text: 'Subcategories'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // --- TAB 1: CATEGORIES MANAGEMENT ---
+          _buildCategoriesTab(),
+
+          // --- TAB 2: SUBCATEGORIES MANAGEMENT ---
+          _buildSubcategoriesTab(),
+        ],
+      ),
+    );
+  }
+
+  // --- TAB 1 BUILDER ---
+  Widget _buildCategoriesTab() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: _isLoadingCategories
+          ? const Center(child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+          : _categories.isEmpty
+              ? _buildEmptyState('No parent categories found', 'Tap + to create a category')
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _categories.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = _categories[index];
+                    final int id = item['id'];
+                    final String name = item['name'] ?? 'Category';
+                    final String slug = item['slug'] ?? name.toLowerCase().replaceAll(' ', '-');
+                    final String? image = item['image'];
+                    final bool isActive = _parseStatus(item['status']);
+
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          // Category Thumbnail Preview
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: image != null && image.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      image,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.category_outlined, color: AppColors.textMuted),
+                                    ),
+                                  )
+                                : const Icon(Icons.category_outlined, color: AppColors.textMuted, size: 26),
+                          ),
+                          const SizedBox(width: 14),
+
+                          // Name, Slug & Status
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isActive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        isActive ? 'Active' : 'Inactive',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isActive ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Slug: /$slug',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Edit & Delete Actions
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
+                            onPressed: () => _showCategoryModalForm(initialCategory: item),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                            onPressed: () => _deleteCategory(id, name),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCategoryModalForm(),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  // --- TAB 2 BUILDER ---
+  Widget _buildSubcategoriesTab() {
+    final filteredSubcats = _selectedFilterParentCategoryId == null
+        ? _subcategories
+        : _subcategories.where((s) => (s['categoryId'] ?? s['category_id']) == _selectedFilterParentCategoryId).toList();
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          // Filter Dropdown by Parent Category
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Colors.white,
+            child: Row(
+              children: [
+                const Icon(Icons.filter_list_rounded, size: 20, color: Colors.black),
+                const SizedBox(width: 8),
+                const Text('Parent Filter:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int?>(
+                        value: _selectedFilterParentCategoryId,
+                        isExpanded: true,
+                        hint: const Text('All Parent Categories', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('All Parent Categories', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                          ..._categories.map((c) {
+                            return DropdownMenuItem<int?>(
+                              value: c['id'] as int,
+                              child: Text(c['name'] ?? 'Category', style: const TextStyle(fontSize: 13)),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedFilterParentCategoryId = val;
+                          });
+                          _loadSubcategories();
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+          Expanded(
+            child: _isLoadingSubcategories
+                ? const Center(child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                : filteredSubcats.isEmpty
+                    ? _buildEmptyState('No subcategories found', 'Tap + to add a subcategory')
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredSubcats.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = filteredSubcats[index];
+                          final int id = item['id'];
+                          final String name = item['name'] ?? 'Subcategory';
+                          final String slug = item['slug'] ?? name.toLowerCase().replaceAll(' ', '-');
+                          final String parentName = item['category_name'] ?? 'Parent Category';
+                          final String? image = item['image'];
+
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                // Image Thumbnail
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: image != null && image.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Image.network(
+                                            image,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted),
+                                          ),
+                                        )
+                                      : const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted, size: 24),
+                                ),
+                                const SizedBox(width: 14),
+
+                                // Details
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Parent: $parentName • /$slug',
+                                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Edit & Delete Actions
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
+                                  onPressed: () => _showSubcategoryModalForm(initialSubcategory: item),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                                  onPressed: () => _deleteSubcategory(id, name),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showSubcategoryModalForm(),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Subcategory', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String title, String subtitle) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.folder_open_outlined, size: 60, color: AppColors.textMuted),
+          const SizedBox(height: 12),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+}
