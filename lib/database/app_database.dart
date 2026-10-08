@@ -84,4 +84,10 @@ class AppDatabase extends _$AppDatabase {
 
     return query.watch();
   }
+
+  Future<int> updateProductStock(int productId, int newStock) {
+    return (update(productsTable)..where((tbl) => tbl.id.equals(productId))).write(
+      ProductsTableCompanion(stock: Value(newStock)),
+    );
+  }
 }

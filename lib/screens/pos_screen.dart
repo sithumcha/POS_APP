@@ -5,6 +5,7 @@ import '../widgets/product_detail_sheet.dart';
 import '../widgets/cart_checkout_sheet.dart';
 import '../widgets/barcode_scanner_modal.dart';
 import '../widgets/product_image_widget.dart';
+import '../widgets/low_stock_restock_sheet.dart';
 import '../database/app_database.dart';
 import '../repositories/catalog_sync_repository.dart';
 import 'product_list_screen.dart';
@@ -172,7 +173,7 @@ class _PosScreenState extends State<PosScreen> {
       "sku": "BAK-005",
       "price": 450.0,
       "discount_price": null,
-      "stock": 18,
+      "stock": 3,
       "status": "active",
       "featured": false,
       "short_description": "Flaky French butter croissant",
@@ -402,6 +403,25 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  void _openLowStockRestockSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => LowStockRestockSheet(
+        products: _products,
+        onStockUpdated: (productId, newStock) {
+          setState(() {
+            final idx = _products.indexWhere((p) => p['id'] == productId);
+            if (idx >= 0) {
+              _products[idx]['stock'] = newStock;
+            }
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _searchQuery.trim().toLowerCase();
@@ -410,6 +430,11 @@ class _PosScreenState extends State<PosScreen> {
       final sku = (p['sku'] ?? '').toString().toLowerCase();
       return query.isEmpty || name.contains(query) || sku.contains(query);
     }).toList();
+
+    final int lowStockCount = _products.where((p) {
+      final stock = (p['stock'] is num) ? (p['stock'] as num).toInt() : 0;
+      return stock <= 5;
+    }).length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
@@ -569,6 +594,32 @@ class _PosScreenState extends State<PosScreen> {
                   }),
                   const SizedBox(width: 6),
                   _buildIconBtn(Icons.qr_code_scanner_rounded, _openBarcodeScannerModal),
+                  const SizedBox(width: 6),
+                  Stack(
+                    children: [
+                      _buildIconBtn(Icons.warning_amber_rounded, _openLowStockRestockSheet),
+                      if (lowStockCount > 0)
+                        Positioned(
+                          right: 2,
+                          top: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$lowStockCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(width: 6),
                   _buildIconBtn(Icons.inventory_outlined, () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductListScreen()));
