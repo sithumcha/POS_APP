@@ -11,7 +11,6 @@ class ApiConfig {
   static String categoriesEndpoint = '/categories';
   static String subcategoriesEndpoint = '/subcategories';
   static String productsEndpoint = '/products';
-
-  /// Set to [false] to disable dummy data and connect to live backend API.
-  static bool useMockApi = false;
+  static String uploadImageEndpoint = '/upload/image';
+  static String uploadImagesEndpoint = '/upload/images';
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/offline_sync_service.dart';
 import '../theme/app_theme.dart';
 
 class ServerStatusBadge extends StatefulWidget {
@@ -17,10 +18,12 @@ class ServerStatusBadge extends StatefulWidget {
 
 class _ServerStatusBadgeState extends State<ServerStatusBadge> {
   final ApiService _apiService = ApiService();
+  final OfflineSyncService _offlineSync = OfflineSyncService();
   Timer? _heartbeatTimer;
 
   bool _isChecking = true;
   bool _isOnline = false;
+  int _pendingCount = 0;
 
   @override
   void initState() {
@@ -43,11 +46,19 @@ class _ServerStatusBadgeState extends State<ServerStatusBadge> {
     });
 
     final status = await _apiService.checkServerHealth();
+    final isOnline = status['isOnline'] as bool? ?? false;
+    final pendingCount = await _offlineSync.getTotalPendingCount();
+
+    if (isOnline && pendingCount > 0) {
+      // Auto drain pending offline queue
+      _offlineSync.syncAllPending();
+    }
 
     if (!mounted) return;
     setState(() {
       _isChecking = false;
-      _isOnline = status['isOnline'] as bool? ?? false;
+      _isOnline = isOnline;
+      _pendingCount = pendingCount;
     });
   }
 
@@ -55,7 +66,9 @@ class _ServerStatusBadgeState extends State<ServerStatusBadge> {
   Widget build(BuildContext context) {
     final String label = _isChecking
         ? 'Checking...'
-        : (_isOnline ? 'Server Online' : 'Server Offline');
+        : (_isOnline
+            ? (_pendingCount > 0 ? 'Online (Syncing $_pendingCount)' : 'Server Online')
+            : (_pendingCount > 0 ? 'Offline ($_pendingCount pending)' : 'Server Offline'));
 
     final Color bgColor = _isChecking
         ? const Color(0xFFFEF3C7)

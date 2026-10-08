@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/receipt_screen.dart';
 
@@ -19,6 +20,8 @@ class CartCheckoutSheet extends StatefulWidget {
 }
 
 class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
+  final ApiService _apiService = ApiService();
+
   // Selected Payment Method: 0 = Cash, 1 = Card, 2 = QR Code
   int _selectedPaymentMethod = 0;
 
@@ -30,10 +33,28 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
   late List<Map<String, dynamic>> _localCart;
 
+  String _currentCashierName = 'Cashier';
+  String _currentStoreName = 'QUICKE POS Store';
+
   @override
   void initState() {
     super.initState();
     _localCart = List<Map<String, dynamic>>.from(widget.cartItems.map((i) => Map<String, dynamic>.from(i)));
+    _loadCurrentUserInfo();
+  }
+
+  Future<void> _loadCurrentUserInfo() async {
+    final info = await _apiService.getUserInfo();
+    if (!mounted || info == null) return;
+    setState(() {
+      final fname = info['first_name'] ?? '';
+      final lname = info['last_name'] ?? '';
+      final full = '$fname $lname'.trim();
+      if (full.isNotEmpty) _currentCashierName = full;
+      if (info['store_name'] != null && info['store_name'].toString().isNotEmpty) {
+        _currentStoreName = info['store_name'].toString();
+      }
+    });
   }
 
   double get _subtotal {
@@ -101,7 +122,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     });
   }
 
-  void _handleCompleteOrder() {
+  Future<void> _handleCompleteOrder() async {
     if (_localCart.isEmpty) return;
 
     if (_selectedPaymentMethod == 0 && _cashTendered < _grandTotal) {
@@ -114,6 +135,21 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
       );
       return;
     }
+
+    final userInfo = await _apiService.getUserInfo();
+    if (!mounted) return;
+    final cashierId = userInfo?['id'] is int ? userInfo!['id'] as int : 14;
+    final paymentMethodStr = _selectedPaymentMethod == 0 ? 'cash' : (_selectedPaymentMethod == 1 ? 'card' : 'qr');
+
+    // Submit Checkout Payload to Backend (POST /orders)
+    _apiService.createOrder(
+      cashierId: cashierId,
+      paymentMethod: paymentMethodStr,
+      totalAmount: _grandTotal,
+      paidAmount: _cashTendered > 0 ? _cashTendered : _grandTotal,
+      changeAmount: _changeDue >= 0 ? _changeDue : 0.0,
+      items: _localCart,
+    );
 
     // Show Printable Receipt Modal Confirmation
     showDialog(
@@ -884,8 +920,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => ReceiptScreen(
-                      storeName: 'POS Store',
-                      cashierName: 'Cashier User',
+                      storeName: _currentStoreName,
+                      cashierName: _currentCashierName,
                       orderItems: _localCart,
                       subtotal: _subtotal,
                       discountAmount: _discountAmount,

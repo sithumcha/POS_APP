@@ -33,23 +33,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   late bool _promoAlerts;
   bool _autoPrintBill = true;
 
+  List<dynamic> _staffList = [];
+
   @override
   void initState() {
     super.initState();
     _lowStockNotifications = _notificationService.lowStockEnabled;
     _orderSoundAlerts = _notificationService.orderChimeEnabled;
     _promoAlerts = _notificationService.promoAlertsEnabled;
-    
+
     // Initial fallback data for instant screen render
     _userData = {
-      'first_name': 'Cashier',
-      'last_name': 'User',
+      'first_name': 'Store',
+      'last_name': 'Admin',
       'email': widget.userEmail,
-      'role': 'Store Manager',
+      'role': 'Store Owner / Admin',
       'store_name': widget.storeName,
     };
 
     _fetchUserProfile();
+    _fetchStaffList();
   }
 
   Future<void> _fetchUserProfile() async {
@@ -57,7 +60,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       final data = await _apiService.getUserDetail();
       if (!mounted) return;
       setState(() {
-        _userData = data;
+        _userData = {..._userData, ...data};
         _isLoading = false;
       });
     } catch (_) {
@@ -68,69 +71,307 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
-  void _openEditProfileDialog() {
-    final firstNameCtrl = TextEditingController(
-      text: (_userData['first_name'] ?? 'Admin').toString(),
-    );
-    final lastNameCtrl = TextEditingController(
-      text: (_userData['last_name'] ?? 'Manager').toString(),
-    );
-    final phoneCtrl = TextEditingController(
-      text: (_userData['phone'] ?? '+94 77 123 4567').toString(),
-    );
+  Future<void> _fetchStaffList() async {
+    try {
+      final staff = await _apiService.getStaffMembers();
+      if (!mounted) return;
+      setState(() {
+        _staffList = staff;
+      });
+    } catch (_) {}
+  }
+
+  void _openAddStaffDialog() {
+    final firstNameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    bool isSaving = false;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Text('Edit Profile Details', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('First Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              TextField(controller: firstNameCtrl),
-              const SizedBox(height: 12),
-              const Text('Last Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              TextField(controller: lastNameCtrl),
-              const SizedBox(height: 12),
-              const Text('Phone Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              TextField(controller: phoneCtrl),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.badge_outlined, color: Colors.black),
+                  SizedBox(width: 8),
+                  Text('Add Staff Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
               ),
-              onPressed: () {
-                setState(() {
-                  _userData['first_name'] = firstNameCtrl.text.trim();
-                  _userData['last_name'] = lastNameCtrl.text.trim();
-                  _userData['phone'] = phoneCtrl.text.trim();
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Profile details updated successfully!'),
-                    backgroundColor: AppColors.success,
-                    behavior: SnackBarBehavior.floating,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Store Owner / Admin creates staff accounts for POS terminal.',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('First Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: firstNameCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Kasun',
+                        prefixIcon: Icon(Icons.person_outline, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Last Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: lastNameCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Perera',
+                        prefixIcon: Icon(Icons.person_outline, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Email Address', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        hintText: 'kasun.pos@store.com',
+                        prefixIcon: Icon(Icons.email_outlined, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Login Password', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: passwordCtrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        hintText: 'StaffPassword@123',
+                        prefixIcon: Icon(Icons.lock_outline, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Role', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.badge_outlined, size: 18, color: Colors.black54),
+                          SizedBox(width: 8),
+                          Text('Staff', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (emailCtrl.text.trim().isEmpty || passwordCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter valid email and password.')),
+                            );
+                            return;
+                          }
+
+                          final messenger = ScaffoldMessenger.of(context);
+                          final navigator = Navigator.of(context);
+
+                          setDialogState(() => isSaving = true);
+                          final res = await _apiService.addStaffMember(
+                            firstName: firstNameCtrl.text.trim(),
+                            lastName: lastNameCtrl.text.trim(),
+                            email: emailCtrl.text.trim(),
+                            password: passwordCtrl.text.trim(),
+                            role: 'staff',
+                          );
+
+                          if (!mounted) return;
+                          navigator.pop();
+
+                          if (res['success'] == true) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(res['message'] ?? 'Staff member created successfully!'),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            _fetchStaffList();
+                          } else {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(res['message'] ?? 'Failed to create staff member.'),
+                                backgroundColor: AppColors.error,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                );
-              },
-              child: const Text('Save Changes'),
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: Text(isSaving ? 'Saving...' : 'Add Staff Member'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmRemoveStaff(Map<String, dynamic> member) {
+    final email = (member['email'] ?? '').toString();
+    final name = '${member['first_name'] ?? ''} ${member['last_name'] ?? ''}'.trim();
+    final displayName = name.isNotEmpty ? name : email;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove Staff Member', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to remove "$displayName" from active staff members?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-          ],
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final res = await _apiService.deleteStaffMember(email: email, id: member['id']);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(res['message'] ?? 'Staff member $displayName removed.'),
+                  backgroundColor: res['success'] == true ? Colors.black87 : AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              _fetchStaffList();
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openEditProfileDialog() {
+    final firstNameCtrl = TextEditingController(
+      text: (_userData['first_name'] ?? '').toString(),
+    );
+    final lastNameCtrl = TextEditingController(
+      text: (_userData['last_name'] ?? '').toString(),
+    );
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              title: const Text('Edit Profile Details', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('First Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(controller: firstNameCtrl),
+                    const SizedBox(height: 12),
+                    const Text('Last Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(controller: lastNameCtrl),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final navigator = Navigator.of(context);
+
+                          setDialogState(() => isSaving = true);
+
+                          final res = await _apiService.updateUserProfile(
+                            firstName: firstNameCtrl.text.trim(),
+                            lastName: lastNameCtrl.text.trim(),
+                          );
+
+                          if (!mounted) return;
+                          navigator.pop();
+
+                          if (res['success'] == true) {
+                            setState(() {
+                              _userData['first_name'] = firstNameCtrl.text.trim();
+                              _userData['last_name'] = lastNameCtrl.text.trim();
+                            });
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(res['message'] ?? 'Profile details updated successfully!'),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            _fetchUserProfile();
+                          } else {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(res['message'] ?? 'Failed to update profile details.'),
+                                backgroundColor: AppColors.error,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  child: Text(isSaving ? 'Saving...' : 'Save Changes'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -235,9 +476,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final lastName = (_userData['last_name'] ?? 'User').toString();
     final fullName = '$firstName $lastName'.trim();
     final email = (_userData['email'] ?? widget.userEmail).toString();
-    final role = (_userData['role'] ?? 'Store Manager').toString();
-    final phone = (_userData['phone'] ?? '+94 77 123 4567').toString();
     final userId = (_userData['id'] ?? 10).toString();
+    final rawUserType = _userData['user_type'];
+    final int? userType = int.tryParse(rawUserType?.toString() ?? '');
+
+    // Type 1 (Super Admin) & Type 2 (Store Owner) -> CAN add staff (isStaffAccount = false)
+    // Type 3 (Staff Member / Cashier) -> CANNOT add staff (isStaffAccount = true)
+    final bool isStaffAccount;
+    if (userType == 1 || userType == 2 || _userData['is_owner'] == true) {
+      isStaffAccount = false;
+    } else if (userType == 3) {
+      isStaffAccount = true;
+    } else {
+      final parentId = _userData['parent_id'];
+      final bool hasParent = parentId != null &&
+          parentId.toString().isNotEmpty &&
+          parentId.toString() != '0' &&
+          parentId.toString().toLowerCase() != 'null';
+      final rawRole = (_userData['role'] ?? '').toString().trim().toLowerCase();
+      isStaffAccount = hasParent || rawRole == 'staff' || rawRole == 'cashier';
+    }
+
+    final role = isStaffAccount
+        ? 'Staff Member'
+        : (userType == 1 ? 'Super Admin' : 'Store Owner / Admin');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -384,8 +646,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       children: [
                         _buildDetailTile(Icons.storefront_rounded, 'Store Name', widget.storeName),
                         const Divider(height: 1),
-                        _buildDetailTile(Icons.phone_outlined, 'Phone Contact', phone),
-                        const Divider(height: 1),
                         _buildDetailTile(Icons.verified_user_outlined, 'Account Status', 'Active & Verified'),
                         const Divider(height: 1),
                         ListTile(
@@ -418,9 +678,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               _lowStockNotifications = val;
                               _notificationService.lowStockEnabled = val;
                             });
-                            if (val) {
-                              _notificationService.triggerLowStockAlert(context, 'Espresso Blend Coffee', 3);
-                            }
                           },
                         ),
                         const Divider(height: 1),
@@ -437,9 +694,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               _orderSoundAlerts = val;
                               _notificationService.orderChimeEnabled = val;
                             });
-                            if (val) {
-                              _notificationService.triggerOrderCompletionNotification(context, 2700.0);
-                            }
                           },
                         ),
                         const Divider(height: 1),
@@ -456,9 +710,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               _promoAlerts = val;
                               _notificationService.promoAlertsEnabled = val;
                             });
-                            if (val) {
-                              _notificationService.triggerPromoAlert(context, 'Wireless Mouse', 2500.0, 2200.0);
-                            }
                           },
                         ),
                       ],
@@ -499,7 +750,85 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // --- 5. SECURITY & LOGOUT ---
+                  // --- 5. STORE STAFF ACCOUNTS (ADMIN ONLY) ---
+                  if (!isStaffAccount) ...[
+                    _buildSectionTitle('Store Staff Members (Admin Only)'),
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: _boxDecoration(),
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.person_add_alt_1_rounded, color: Colors.black, size: 22),
+                            title: const Text('Add Staff Account', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Create POS terminal login for staff members (POST /users/staff/add)', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            trailing: const Icon(Icons.add_circle_outline_rounded, color: Colors.black),
+                            onTap: _openAddStaffDialog,
+                          ),
+                          if (_staffList.isNotEmpty) ...[
+                            const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('ACTIVE STAFF MEMBERS (${_staffList.length})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                                  const SizedBox(height: 6),
+                                  ..._staffList.map((member) {
+                                    final name = '${member['first_name'] ?? ''} ${member['last_name'] ?? ''}'.trim();
+                                    final email = member['email'] ?? '';
+                                    final role = (member['role'] ?? 'staff').toString().toUpperCase();
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      child: Row(
+                                        children: [
+                                          const CircleAvatar(
+                                            radius: 12,
+                                            backgroundColor: Color(0xFFE2E8F0),
+                                            child: Icon(Icons.person, size: 14, color: Colors.black),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(name.isNotEmpty ? name : email, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                                Text(email, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(role, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            onTap: () => _confirmRemoveStaff(member),
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(4.0),
+                                              child: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // --- 6. SECURITY & LOGOUT ---
                   _buildSectionTitle('Security & Session Management'),
                   const SizedBox(height: 10),
                   Container(

@@ -11,6 +11,7 @@ import '../repositories/catalog_sync_repository.dart';
 import 'product_list_screen.dart';
 import 'category_setup_screen.dart';
 import 'user_profile_screen.dart';
+import 'login_screen.dart';
 
 class PosScreen extends StatefulWidget {
   final String userEmail;
@@ -32,176 +33,9 @@ class _PosScreenState extends State<PosScreen> {
   late final CatalogSyncRepository _catalogRepo = CatalogSyncRepository(apiService: _apiService, db: _db);
   final TextEditingController _searchController = TextEditingController();
 
-  List<dynamic> _categories = [
-    {
-      "id": 1,
-      "user_id": 10,
-      "name": "Electronics",
-      "slug": "electronics",
-      "image": "https://images.unsplash.com/photo-1498049860654-af1a5c570f1a?w=400",
-      "description": "Electronic items and gadgets",
-      "status": "active"
-    },
-    {
-      "id": 2,
-      "user_id": 10,
-      "name": "Beverages",
-      "slug": "beverages",
-      "image": "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=400",
-      "description": "Hot & Cold Drinks, Coffees, Teas",
-      "status": "active"
-    },
-    {
-      "id": 3,
-      "user_id": 10,
-      "name": "Bakery & Snacks",
-      "slug": "bakery-snacks",
-      "image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=400",
-      "description": "Freshly baked items and snacks",
-      "status": "active"
-    },
-  ];
-
-  List<dynamic> _subcategories = [
-    {
-      "id": 1,
-      "category_id": 1,
-      "name": "Smartphones",
-      "slug": "smartphones",
-      "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400",
-      "description": "Smartphones and mobile devices",
-      "status": "active"
-    },
-    {
-      "id": 2,
-      "category_id": 1,
-      "name": "Computer Peripherals",
-      "slug": "computer-peripherals",
-      "image": "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=400",
-      "description": "Mice, keyboards, and accessories",
-      "status": "active"
-    },
-    {
-      "id": 3,
-      "category_id": 2,
-      "name": "Hot Coffee",
-      "slug": "hot-coffee",
-      "image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400",
-      "description": "Espresso, Latte, Cappuccino",
-      "status": "active"
-    },
-  ];
-
-  List<dynamic> _products = [
-    {
-      "id": 1,
-      "category_id": 1,
-      "subcategory_id": 2,
-      "name": "Wireless Mouse",
-      "sku": "WM-001",
-      "price": 2500.0,
-      "discount_price": 2200.0,
-      "stock": 45,
-      "status": "active",
-      "featured": false,
-      "short_description": "Ergonomic wireless mouse",
-      "full_description": "2.4GHz optical wireless mouse with USB receiver",
-      "main_image": "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500",
-      "images": ["https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500"],
-      "tags": ["electronics", "accessories"],
-      "variations": []
-    },
-    {
-      "id": 2,
-      "category_id": 1,
-      "subcategory_id": 1,
-      "name": "Smartphone Pro Max",
-      "sku": "SP-002",
-      "price": 125000.0,
-      "discount_price": 118000.0,
-      "stock": 10,
-      "status": "active",
-      "featured": true,
-      "short_description": "6.7 inch OLED 5G smartphone",
-      "full_description": "Ultra high resolution smartphone with triple lens camera",
-      "main_image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500",
-      "images": ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500"],
-      "tags": ["mobile", "5g"],
-      "variations": []
-    },
-    {
-      "id": 3,
-      "category_id": 2,
-      "subcategory_id": 3,
-      "name": "Espresso Blend Coffee",
-      "sku": "CB-003",
-      "price": 1500.0,
-      "discount_price": 1350.0,
-      "stock": 3,
-      "status": "active",
-      "featured": true,
-      "short_description": "Freshly roasted coffee beans",
-      "full_description": "Rich dark roast arabica coffee beans ethically sourced",
-      "main_image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500",
-      "images": ["https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500"],
-      "tags": ["beverage", "coffee"],
-      "variations": []
-    },
-    {
-      "id": 4,
-      "category_id": 2,
-      "subcategory_id": 3,
-      "name": "Organic Ceylon Tea",
-      "sku": "TEA-004",
-      "price": 850.0,
-      "discount_price": 750.0,
-      "stock": 25,
-      "status": "active",
-      "featured": false,
-      "short_description": "Pure Ceylon black tea",
-      "full_description": "Hand-picked Ceylon tea leaves from Nuwara Eliya estates",
-      "main_image": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500",
-      "images": ["https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500"],
-      "tags": ["beverage", "tea"],
-      "variations": []
-    },
-    {
-      "id": 5,
-      "category_id": 3,
-      "subcategory_id": null,
-      "name": "Butter Croissant",
-      "sku": "BAK-005",
-      "price": 450.0,
-      "discount_price": null,
-      "stock": 3,
-      "status": "active",
-      "featured": false,
-      "short_description": "Flaky French butter croissant",
-      "full_description": "Freshly baked daily with authentic French butter",
-      "main_image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500",
-      "images": ["https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500"],
-      "tags": ["bakery", "pastry"],
-      "variations": []
-    },
-    {
-      "id": 6,
-      "category_id": 1,
-      "subcategory_id": 2,
-      "name": "Mechanical Keyboard",
-      "sku": "KB-006",
-      "price": 8500.0,
-      "discount_price": 7900.0,
-      "stock": 4,
-      "status": "active",
-      "featured": true,
-      "short_description": "RGB Mechanical Gaming Keyboard",
-      "full_description": "Tactile mechanical switches with customizable RGB backlight",
-      "main_image": null,
-      "images": [],
-      "tags": ["electronics", "gaming"],
-      "variations": []
-    }
-  ];
+  List<dynamic> _categories = [];
+  List<dynamic> _subcategories = [];
+  List<dynamic> _products = [];
 
   int? _selectedCategoryId;
   int? _selectedSubcategoryId;
@@ -223,6 +57,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _loadInitialData() async {
+    setState(() => _isLoadingProducts = true);
     try {
       final categoriesData = await _catalogRepo.getCachedOrRemoteCategories();
       final productsData = await _catalogRepo.getCachedOrRemoteProducts();
@@ -232,8 +67,11 @@ class _PosScreenState extends State<PosScreen> {
         _categories = categoriesData;
         _products = productsData;
         _subcategories = []; // Clear mixed subcategories on initial All Items view
+        _isLoadingProducts = false;
       });
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingProducts = false);
+    }
   }
 
   Future<void> _onCategorySelected(int? categoryId) async {
@@ -420,6 +258,54 @@ class _PosScreenState extends State<PosScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('Are you sure you want to log out of your store account?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _apiService.clearToken();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logged out successfully.'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -628,6 +514,8 @@ class _PosScreenState extends State<PosScreen> {
                   _buildIconBtn(Icons.category_outlined, () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const CategorySetupScreen()));
                   }),
+                  const SizedBox(width: 6),
+                  _buildIconBtn(Icons.logout_rounded, _handleLogout),
                 ],
               ),
             ),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../config/env_config.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/server_status_badge.dart';
@@ -18,14 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
   // Mode: 0 = Cashier/Admin Sign In, 1 = Register New Account
   int _selectedTabMode = 0;
 
-  // Selected preset role: 'cashier' or 'admin'
-  String _selectedPresetRole = 'cashier';
-
-  // Text Controllers initialized with default env values
+  // Text Controllers
   late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
-  final TextEditingController _firstNameController = TextEditingController(text: 'John');
-  final TextEditingController _lastNameController = TextEditingController(text: 'Doe');
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -34,8 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _emailController = TextEditingController(text: 'sithum.pos@quicke.app');
-    _passwordController = TextEditingController(text: 'Password123!');
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
   }
 
   @override
@@ -45,19 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     super.dispose();
-  }
-
-  void _selectPresetRole(String role) {
-    setState(() {
-      _selectedPresetRole = role;
-      if (role == 'admin') {
-        _emailController.text = EnvConfig.adminEmail;
-        _passwordController.text = EnvConfig.adminPassword;
-      } else {
-        _emailController.text = EnvConfig.cashierEmail;
-        _passwordController.text = EnvConfig.cashierPassword;
-      }
-    });
   }
 
   Future<void> _handleSubmit() async {
@@ -70,8 +53,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    final isAdmin = (email == EnvConfig.adminEmail || email.toLowerCase().contains('admin'));
-    final roleName = isAdmin ? EnvConfig.adminName : EnvConfig.cashierName;
+    final isAdmin = email.toLowerCase().contains('admin');
+    final roleName = isAdmin ? 'Admin' : 'Cashier';
 
     if (_selectedTabMode == 0) {
       // --- CASHIER / ADMIN SIGN IN ---
@@ -81,8 +64,16 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
 
         if (res['success'] == true) {
-          final userObj = res['user'] is Map<String, dynamic> ? res['user'] as Map<String, dynamic> : null;
-          final displayName = userObj?['first_name'] ?? roleName;
+          final userDetail = await _apiService.getUserDetail();
+          if (!mounted) return;
+
+          final userObj = res['user'] is Map<String, dynamic> ? res['user'] as Map<String, dynamic> : userDetail;
+          final displayName = userObj['first_name'] ?? userDetail['first_name'] ?? roleName;
+          final storeNameStr = (userDetail['store_name'] != null && userDetail['store_name'].toString().isNotEmpty)
+              ? userDetail['store_name'].toString()
+              : ((userDetail['first_name'] != null && userDetail['first_name'].toString().isNotEmpty)
+                  ? "${userDetail['first_name']} Store"
+                  : '$displayName Store');
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -97,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
             MaterialPageRoute(
               builder: (context) => PosScreen(
                 userEmail: email,
-                storeName: userObj?['store_name'] ?? '$displayName Store',
+                storeName: storeNameStr,
               ),
             ),
             (route) => false,
@@ -277,132 +268,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // --- .ENV PRESET LOGINS (ADMIN & CASHIER) ---
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Quick Demo Login Presets',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF64748B),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () => _selectPresetRole('admin'),
-                                          borderRadius: BorderRadius.circular(10),
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 150),
-                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                                            decoration: BoxDecoration(
-                                              color: _selectedPresetRole == 'admin' ? Colors.black : Colors.white,
-                                              borderRadius: BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color: _selectedPresetRole == 'admin' ? Colors.black : const Color(0xFFCBD5E1),
-                                              ),
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.admin_panel_settings_rounded,
-                                                      size: 16,
-                                                      color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      'Admin',
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: _selectedPresetRole == 'admin' ? Colors.white : Colors.black,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '${EnvConfig.adminEmail}\nPass: ${EnvConfig.adminPassword}',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: _selectedPresetRole == 'admin' ? Colors.white70 : AppColors.textMuted,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () => _selectPresetRole('cashier'),
-                                          borderRadius: BorderRadius.circular(10),
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 150),
-                                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                                            decoration: BoxDecoration(
-                                              color: _selectedPresetRole == 'cashier' ? Colors.black : Colors.white,
-                                              borderRadius: BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color: _selectedPresetRole == 'cashier' ? Colors.black : const Color(0xFFCBD5E1),
-                                              ),
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.point_of_sale_rounded,
-                                                      size: 16,
-                                                      color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      'Cashier',
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: _selectedPresetRole == 'cashier' ? Colors.white : Colors.black,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '${EnvConfig.cashierEmail}\nPass: ${EnvConfig.cashierPassword}',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: _selectedPresetRole == 'cashier' ? Colors.white70 : AppColors.textMuted,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-
                             // --- TABS TOGGLE (Sign In vs Register) ---
                             Container(
                               padding: const EdgeInsets.all(4),

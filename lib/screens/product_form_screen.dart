@@ -50,41 +50,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   bool get _isEditMode => widget.initialProduct != null;
 
-  // Catalog Preset Images for quick selection
-  final List<Map<String, String>> _presetImages = [
-    {
-      'title': 'Wireless Mouse',
-      'url': 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Smartphone',
-      'url': 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Espresso Coffee',
-      'url': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Ceylon Tea',
-      'url': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Butter Croissant',
-      'url': 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Mechanical Keyboard',
-      'url': 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Headphones',
-      'url': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60',
-    },
-    {
-      'title': 'Bakery Snacks',
-      'url': 'https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=500&auto=format&fit=crop&q=60',
-    },
-  ];
+
 
   @override
   void initState() {
@@ -336,57 +302,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 20),
-
-              // Preset Stock Photos Section
-              const Text(
-                'Or Choose Sample Product Photo',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-              const SizedBox(height: 10),
-
-              SizedBox(
-                height: 110,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _presetImages.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final item = _presetImages[index];
-                    return GestureDetector(
-                      onTap: () {
-                        onImageSelected(item['url']!);
-                        Navigator.pop(context);
-                      },
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(11),
-                              child: Image.network(
-                                item['url']!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.image, color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item['title']!,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
               ),
               const SizedBox(height: 16),
 

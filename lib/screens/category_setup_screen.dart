@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
@@ -41,6 +42,54 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       _loadCategories(),
       _loadSubcategories(),
     ]);
+  }
+
+  Future<void> _pickAndUploadImage({
+    required StateSetter setModalState,
+    required TextEditingController imageCtrl,
+    required Function(bool isUploading) setUploading,
+  }) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (file == null) return;
+
+      setUploading(true);
+
+      final bytes = await file.readAsBytes();
+      final filename = file.name.isNotEmpty ? file.name : 'cat_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final res = await _apiService.uploadImage(bytes, filename);
+
+      setUploading(false);
+
+      if (res['success'] == true && res['url'] != null && (res['url'] as String).isNotEmpty) {
+        setModalState(() {
+          imageCtrl.text = res['url'] as String;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image uploaded successfully!'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Failed to upload image.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setUploading(false);
+      debugPrint('Error picking category image: $e');
+    }
   }
 
   // --- API: GET /categories ---
@@ -200,6 +249,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     final imageCtrl = TextEditingController(text: isEdit ? (initialCategory['image'] ?? '') : '');
     final descCtrl = TextEditingController(text: isEdit ? (initialCategory['description'] ?? '') : '');
     bool isActive = isEdit ? _parseStatus(initialCategory['status']) : true;
+    bool isUploadingImage = false;
 
     showModalBottomSheet(
       context: context,
@@ -256,10 +306,106 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   ),
                   const SizedBox(height: 12),
 
-                  // Image URL
-                  TextField(
-                    controller: imageCtrl,
-                    decoration: const InputDecoration(labelText: 'Image URL', hintText: 'https://example.com/category.jpg'),
+                  // Image Upload Box
+                  const Text('Category Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: isUploadingImage
+                        ? null
+                        : () => _pickAndUploadImage(
+                              setModalState: setModalState,
+                              imageCtrl: imageCtrl,
+                              setUploading: (val) => setModalState(() => isUploadingImage = val),
+                            ),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      height: 110,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: imageCtrl.text.isNotEmpty ? Colors.black : const Color(0xFFCBD5E1),
+                          width: imageCtrl.text.isNotEmpty ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: isUploadingImage
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2)),
+                                  SizedBox(height: 8),
+                                  Text('Uploading image...', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                ],
+                              ),
+                            )
+                          : imageCtrl.text.isNotEmpty
+                              ? Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(13),
+                                      child: Image.network(
+                                        imageCtrl.text,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Center(
+                                          child: Icon(Icons.broken_image_outlined, size: 36, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 6,
+                                      right: 6,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setModalState(() {
+                                            imageCtrl.clear();
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 6,
+                                      left: 6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.75),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.edit_rounded, color: Colors.white, size: 12),
+                                            SizedBox(width: 4),
+                                            Text('Change Image', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.cloud_upload_outlined, size: 32, color: Colors.black87),
+                                    SizedBox(height: 6),
+                                    Text('Tap to Select & Upload Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                                    SizedBox(height: 2),
+                                    Text('Supports PNG, JPG, WEBP formats', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                    ),
                   ),
                   const SizedBox(height: 12),
 
@@ -355,6 +501,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     final nameCtrl = TextEditingController(text: isEdit ? initialSubcategory['name'] : '');
     final slugCtrl = TextEditingController(text: isEdit ? (initialSubcategory['slug'] ?? '') : '');
     final imageCtrl = TextEditingController(text: isEdit ? (initialSubcategory['image'] ?? '') : '');
+    bool isUploadingImage = false;
 
     showModalBottomSheet(
       context: context,
@@ -431,10 +578,106 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   ),
                   const SizedBox(height: 12),
 
-                  // Image URL
-                  TextField(
-                    controller: imageCtrl,
-                    decoration: const InputDecoration(labelText: 'Image URL', hintText: 'https://example.com/subcat.jpg'),
+                  // Image Upload Box
+                  const Text('Subcategory Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: isUploadingImage
+                        ? null
+                        : () => _pickAndUploadImage(
+                              setModalState: setModalState,
+                              imageCtrl: imageCtrl,
+                              setUploading: (val) => setModalState(() => isUploadingImage = val),
+                            ),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      height: 110,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: imageCtrl.text.isNotEmpty ? Colors.black : const Color(0xFFCBD5E1),
+                          width: imageCtrl.text.isNotEmpty ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: isUploadingImage
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2)),
+                                  SizedBox(height: 8),
+                                  Text('Uploading image...', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                ],
+                              ),
+                            )
+                          : imageCtrl.text.isNotEmpty
+                              ? Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(13),
+                                      child: Image.network(
+                                        imageCtrl.text,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Center(
+                                          child: Icon(Icons.broken_image_outlined, size: 36, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 6,
+                                      right: 6,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setModalState(() {
+                                            imageCtrl.clear();
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 6,
+                                      left: 6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.75),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.edit_rounded, color: Colors.white, size: 12),
+                                            SizedBox(width: 4),
+                                            Text('Change Image', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.cloud_upload_outlined, size: 32, color: Colors.black87),
+                                    SizedBox(height: 6),
+                                    Text('Tap to Select & Upload Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                                    SizedBox(height: 2),
+                                    Text('Supports PNG, JPG, WEBP formats', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                    ),
                   ),
                   const SizedBox(height: 20),
 

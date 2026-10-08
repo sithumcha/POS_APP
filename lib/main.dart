@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/pos_screen.dart';
 import 'services/api_service.dart';
+import 'services/offline_sync_service.dart';
 import 'theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  OfflineSyncService().startPeriodicSync();
   runApp(const PosApp());
 }
 
@@ -34,7 +36,8 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   bool _isLoggedIn = false;
-  final String _userEmail = 'admin@pos.com';
+  String _userEmail = '';
+  String _storeName = 'POS STORE';
 
   @override
   void initState() {
@@ -46,7 +49,12 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
     try {
       final token = await _apiService.getToken();
       if (token != null && token.isNotEmpty) {
+        final userInfo = await _apiService.getUserInfo();
         _isLoggedIn = true;
+        if (userInfo != null) {
+          _userEmail = userInfo['email']?.toString() ?? '';
+          _storeName = userInfo['store_name']?.toString() ?? 'POS STORE';
+        }
       }
     } catch (_) {}
 
@@ -70,7 +78,7 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
     if (_isLoggedIn) {
       return PosScreen(
         userEmail: _userEmail,
-        storeName: 'MY SUPERMARKET POS',
+        storeName: _storeName,
       );
     }
 
