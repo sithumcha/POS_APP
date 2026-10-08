@@ -34,8 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _emailController = TextEditingController(text: EnvConfig.cashierEmail);
-    _passwordController = TextEditingController(text: EnvConfig.cashierPassword);
+    _emailController = TextEditingController(text: 'sithum.pos@quicke.app');
+    _passwordController = TextEditingController(text: 'Password123!');
   }
 
   @override
