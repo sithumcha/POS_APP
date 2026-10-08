@@ -126,13 +126,13 @@ class ApiService {
           Uri.parse('$baseUrl/users/login'),
           headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
           body: jsonEncode({'email': email, 'password': password}),
-        );
-        if (res.statusCode == 200 || res.statusCode == 201) {
-          final data = jsonDecode(res.body);
-          if (data is Map<String, dynamic>) {
-            if (data['token'] != null) {
-              await saveToken(data['token'].toString());
-            }
+        ).timeout(const Duration(seconds: 10));
+
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          final isSuccess = data['success'] == true || (data['token'] != null && data['error'] == null);
+          if (isSuccess && data['token'] != null) {
+            await saveToken(data['token'].toString());
             if (data['user'] is Map<String, dynamic>) {
               await saveUserInfo(data['user'] as Map<String, dynamic>);
             } else if (data['data'] is Map<String, dynamic>) {
@@ -140,17 +140,34 @@ class ApiService {
             } else {
               await saveUserInfo({
                 'email': email,
-                'first_name': email.split('@')[0],
+                'first_name': email.contains('@') ? email.split('@')[0] : 'User',
                 'last_name': 'User',
               });
             }
-            return data;
+            return {
+              'success': true,
+              'token': data['token'],
+              'user': data['user'] ?? data['data'],
+              'message': data['message'] ?? 'Login successful',
+            };
+          } else {
+            final errorMsg = data['error'] ?? data['message'] ?? 'Invalid email or password.';
+            return {
+              'success': false,
+              'message': errorMsg.toString(),
+            };
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Login connection error: $e');
+        return {
+          'success': false,
+          'message': 'Server connection error. Please check internet connection.',
+        };
+      }
     }
 
-    // Save Logged-in user info locally for fallback
+    // Mock mode fallback when ApiConfig.useMockApi is true
     final mockUser = {
       'id': 101,
       'first_name': email.contains('@') ? email.split('@')[0].toUpperCase() : 'Cashier',
@@ -158,16 +175,16 @@ class ApiService {
       'email': email,
       'role': 'Store Cashier',
       'store_name': 'QUICKE POS STORE',
-      'phone': '+94 77 123 4567',
     };
     const mockToken = 'mock_jwt_token_auth_12345';
     await saveToken(mockToken);
     await saveUserInfo(mockUser);
 
     return {
+      'success': true,
       'token': mockToken,
       'user': mockUser,
-      'message': 'Login successful'
+      'message': 'Login successful (Mock Mode)',
     };
   }
 
@@ -187,21 +204,44 @@ class ApiService {
           Uri.parse('$baseUrl/users/register'),
           headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
           body: jsonEncode(body),
-        );
-        if (res.statusCode == 200 || res.statusCode == 201) {
-          final data = jsonDecode(res.body);
-          if (data is Map<String, dynamic> && data['token'] != null) {
-            await saveToken(data['token'].toString());
+        ).timeout(const Duration(seconds: 10));
+
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          final isSuccess = data['success'] == true || (data['token'] != null && data['error'] == null);
+          if (isSuccess) {
+            if (data['token'] != null) {
+              await saveToken(data['token'].toString());
+            }
+            if (data['user'] is Map<String, dynamic>) {
+              await saveUserInfo(data['user'] as Map<String, dynamic>);
+            }
+            return {
+              'success': true,
+              'token': data['token'],
+              'user': data['user'],
+              'message': data['message'] ?? 'User registered successfully',
+            };
+          } else {
+            final errorMsg = data['error'] ?? data['message'] ?? 'Registration failed. Email may already be registered.';
+            return {
+              'success': false,
+              'message': errorMsg.toString(),
+            };
           }
-          return data is Map<String, dynamic> ? data : {'message': 'User registered successfully'};
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Register connection error: $e');
+        return {
+          'success': false,
+          'message': 'Server connection error. Please try again.',
+        };
+      }
     }
 
-    // Fallback
     const mockToken = 'mock_jwt_token_register_67890';
     await saveToken(mockToken);
-    return {'token': mockToken, 'message': 'User registered successfully'};
+    return {'success': true, 'token': mockToken, 'message': 'User registered successfully (Mock Mode)'};
   }
 
   // --- Categories APIs ---

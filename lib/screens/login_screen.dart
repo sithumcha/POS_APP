@@ -75,83 +75,117 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (_selectedTabMode == 0) {
       // --- CASHIER / ADMIN SIGN IN ---
-      bool apiSuccess = false;
       try {
         final res = await _apiService.login(email, password);
-        if (res.containsKey('token')) {
-          await _apiService.saveToken(res['token']);
-          apiSuccess = true;
+
+        if (!mounted) return;
+
+        if (res['success'] == true) {
+          final userObj = res['user'] is Map<String, dynamic> ? res['user'] as Map<String, dynamic> : null;
+          final displayName = userObj?['first_name'] ?? roleName;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Logged in successfully as $displayName!'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PosScreen(
+                userEmail: email,
+                storeName: userObj?['store_name'] ?? '$displayName Store',
+              ),
+            ),
+            (route) => false,
+          );
+        } else {
+          // Access Denied / Invalid Credentials
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Invalid email or password. Access denied.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+          return;
         }
-      } catch (_) {
-        // Backend API offline/CORS fallback
-      }
-
-      if (!apiSuccess) {
-        await _apiService.saveToken('jwt_token_env_authenticated');
-      }
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(apiSuccess 
-            ? 'Logged in successfully as $roleName!' 
-            : 'Signed in as $roleName (Offline / Demo Mode)'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PosScreen(
-            userEmail: email,
-            storeName: '$roleName Store',
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Authentication error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
-        ),
-        (route) => false,
-      );
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
     } else {
       // --- REGISTER NEW ACCOUNT ---
       final firstName = _firstNameController.text.trim();
       final lastName = _lastNameController.text.trim();
 
-      bool apiSuccess = false;
       try {
         final res = await _apiService.register(firstName, lastName, email, password);
-        if (res.containsKey('token')) {
-          await _apiService.saveToken(res['token']);
-          apiSuccess = true;
+
+        if (!mounted) return;
+
+        if (res['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Account registered for $firstName $lastName!'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PosScreen(
+                userEmail: email,
+                storeName: '$firstName $lastName POS',
+              ),
+            ),
+            (route) => false,
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Registration failed. Email may already be in use.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+          return;
         }
-      } catch (_) {
-        // Backend API offline fallback
-      }
-
-      if (!apiSuccess) {
-        await _apiService.saveToken('jwt_token_new_user');
-      }
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Account registered for $firstName $lastName!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PosScreen(
-            userEmail: email,
-            storeName: '$firstName $lastName POS',
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
-        ),
-        (route) => false,
-      );
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
     }
 
     if (mounted) {
