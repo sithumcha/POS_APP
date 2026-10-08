@@ -512,6 +512,16 @@ class ApiService {
     } catch (_) {}
   }
 
+  /// Permanently removes all unsynced/rejected staff members from local database/storage
+  Future<void> purgeUnsyncedStaffMembers() async {
+    try {
+      final current = await getLocalStaffMembers();
+      current.removeWhere((item) => item['is_synced'] != true);
+      await _storage.write(key: 'local_staff_members', value: jsonEncode(current));
+      debugPrint('[ApiService] Successfully purged unsynced staff members from local database.');
+    } catch (_) {}
+  }
+
   /// POST /users/staff/delete (Admin deletes a staff member from backend & local storage)
   Future<Map<String, dynamic>> deleteStaffMember({required String email, dynamic id}) async {
     await removeLocalStaffMember(email);
@@ -789,10 +799,12 @@ class ApiService {
       final res = await http.get(
         Uri.parse('$baseUrl/categories'),
         headers: await _headers(),
-      ).timeout(const Duration(milliseconds: 3000));
+      ).timeout(const Duration(milliseconds: 6000));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List) return data;
+        if (data is Map && data['data'] is List) return data['data'];
+        if (data is Map && data['categories'] is List) return data['categories'];
       }
     } catch (e) {
       debugPrint('getCategories error: $e');
@@ -892,10 +904,12 @@ class ApiService {
     try {
       String endpoint = '$baseUrl/subcategories';
       if (categoryId != null) endpoint += '?categoryId=$categoryId';
-      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 3000));
+      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 5000));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List) return data;
+        if (data is Map && data['data'] is List) return data['data'];
+        if (data is Map && data['subcategories'] is List) return data['subcategories'];
       }
     } catch (e) {
       debugPrint('getSubcategories error: $e');
@@ -921,47 +935,114 @@ class ApiService {
   }
 
   /// POST /subcategories
-  Future<bool> createSubcategory(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createSubcategory(Map<String, dynamic> data) async {
+    final catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+    final Map<String, dynamic> bodyMap = {
+      'category_id': catId,
+      'name': (data['name'] ?? '').toString().trim(),
+      'slug': (data['slug'] != null && data['slug'].toString().trim().isNotEmpty)
+          ? data['slug'].toString().trim()
+          : (data['name'] ?? '').toString().trim().toLowerCase().replaceAll(' ', '-'),
+      'description': (data['description'] != null && data['description'].toString().trim().isNotEmpty)
+          ? data['description'].toString().trim()
+          : (data['name'] ?? '').toString().trim(),
+      'status': data['status'] == 'inactive' ? 'inactive' : 'active',
+    };
+
+    if (data['image'] != null && data['image'].toString().trim().isNotEmpty) {
+      bodyMap['image'] = data['image'].toString().trim();
+    }
+
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/subcategories'),
         headers: await _headers(),
-        body: jsonEncode({
-          'category_id': data['category_id'],
-          'name': data['name'],
-          'slug': data['slug'],
-          'image': data['image'],
-          'description': data['description'],
-          'status': data['status'] ?? 'active',
-        }),
+        body: jsonEncode(bodyMap),
       );
-      if (res.statusCode == 200 || res.statusCode == 201) return true;
+      debugPrint('[API] createSubcategory response: status=${res.statusCode}, body=${res.body}');
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'statusCode': res.statusCode};
+      }
+
+      String errorMsg = 'HTTP ${res.statusCode}';
+      try {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map && decoded['message'] != null) {
+          errorMsg = decoded['message'].toString();
+        }
+      } catch (_) {}
+
+      return {'success': false, 'statusCode': res.statusCode, 'message': errorMsg};
     } catch (e) {
-      debugPrint('createSubcategory error: $e');
+      debugPrint('[API] createSubcategory error (queueing offline): $e');
+      try {
+        await OfflineSyncService().queueSubcategoryAction(action: 'create', data: bodyMap);
+        return {'success': true, 'message': 'Queued offline', 'isOffline': true};
+      } catch (_) {}
+      return {'success': false, 'message': e.toString()};
     }
-    return false;
   }
 
   /// PUT /subcategories/{id}
-  Future<bool> updateSubcategory(int id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateSubcategory(int id, Map<String, dynamic> data) async {
+    final catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+    final Map<String, dynamic> bodyMap = {
+      'category_id': catId,
+      'name': (data['name'] ?? '').toString().trim(),
+      'slug': (data['slug'] != null && data['slug'].toString().trim().isNotEmpty)
+          ? data['slug'].toString().trim()
+          : (data['name'] ?? '').toString().trim().toLowerCase().replaceAll(' ', '-'),
+      'description': (data['description'] != null && data['description'].toString().trim().isNotEmpty)
+          ? data['description'].toString().trim()
+          : (data['name'] ?? '').toString().trim(),
+      'status': data['status'] == 'inactive' ? 'inactive' : 'active',
+    };
+
+    if (data['image'] != null && data['image'].toString().trim().isNotEmpty) {
+      bodyMap['image'] = data['image'].toString().trim();
+    }
+
+    // If ID is a local timestamp ID (e.g. > 1,000,000,000), it has not been created on server yet -> create it!
+    if (id > 1000000000) {
+      debugPrint('[API] Subcategory ID $id is a local ID. Calling createSubcategory instead...');
+      return await createSubcategory(data);
+    }
+
     try {
       final res = await http.put(
         Uri.parse('$baseUrl/subcategories/$id'),
         headers: await _headers(),
-        body: jsonEncode({
-          'category_id': data['category_id'],
-          'name': data['name'],
-          'slug': data['slug'],
-          'image': data['image'],
-          'description': data['description'],
-          'status': data['status'] ?? 'active',
-        }),
+        body: jsonEncode(bodyMap),
       );
-      if (res.statusCode == 200) return true;
+      debugPrint('[API] updateSubcategory response: status=${res.statusCode}, body=${res.body}');
+
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        return {'success': true, 'statusCode': res.statusCode};
+      }
+
+      // If server returns 404 (does not exist on DB), fallback to create it on DB
+      if (res.statusCode == 404) {
+        debugPrint('[API] Subcategory ID $id returned 404. Creating it in database now...');
+        return await createSubcategory(data);
+      }
+
+      String errorMsg = 'HTTP ${res.statusCode}';
+      try {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map && decoded['message'] != null) {
+          errorMsg = decoded['message'].toString();
+        }
+      } catch (_) {}
+
+      return {'success': false, 'statusCode': res.statusCode, 'message': errorMsg};
     } catch (e) {
-      debugPrint('updateSubcategory error: $e');
+      debugPrint('[API] updateSubcategory error (queueing offline): $e');
+      try {
+        await OfflineSyncService().queueSubcategoryAction(action: 'update', data: bodyMap, id: id);
+        return {'success': true, 'message': 'Queued offline', 'isOffline': true};
+      } catch (_) {}
+      return {'success': false, 'message': e.toString()};
     }
-    return false;
   }
 
   /// DELETE /subcategories/{id}
@@ -973,7 +1054,11 @@ class ApiService {
       );
       if (res.statusCode == 200 || res.statusCode == 204) return true;
     } catch (e) {
-      debugPrint('deleteSubcategory error: $e');
+      debugPrint('[API] deleteSubcategory error (queueing offline): $e');
+      try {
+        await OfflineSyncService().queueSubcategoryAction(action: 'delete', data: {}, id: id);
+        return true;
+      } catch (_) {}
     }
     return false;
   }
@@ -989,13 +1074,16 @@ class ApiService {
       if (subCategoryId != null) params.add('subCategoryId=$subCategoryId');
       if (params.isNotEmpty) endpoint += '?${params.join('&')}';
 
-      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 3000));
+      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(seconds: 10));
+      debugPrint('[API] getProducts response: status=${res.statusCode}');
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List) return data;
+        if (data is Map && data['data'] is List) return data['data'];
+        if (data is Map && data['products'] is List) return data['products'];
       }
     } catch (e) {
-      debugPrint('getProducts error: $e');
+      debugPrint('[API] getProducts error: $e');
     }
     return [];
   }

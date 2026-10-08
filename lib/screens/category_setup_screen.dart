@@ -494,14 +494,63 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
   // --- API: POST /subcategories OR PUT /subcategories/{id} MODAL SHEET ---
   void _showSubcategoryModalForm({Map<String, dynamic>? initialSubcategory}) {
     final bool isEdit = initialSubcategory != null;
-    int? selectedParentId = isEdit
-        ? (initialSubcategory['categoryId'] ?? initialSubcategory['category_id'])
-        : (_categories.isNotEmpty ? _categories.first['id'] : null);
 
-    final nameCtrl = TextEditingController(text: isEdit ? initialSubcategory['name'] : '');
-    final slugCtrl = TextEditingController(text: isEdit ? (initialSubcategory['slug'] ?? '') : '');
-    final imageCtrl = TextEditingController(text: isEdit ? (initialSubcategory['image'] ?? '') : '');
+    final availableIds = _categories
+        .map((c) => int.tryParse(c['id']?.toString() ?? ''))
+        .whereType<int>()
+        .toSet();
+
+    int? selectedParentId;
+    if (isEdit) {
+      final dynamic rawCat = initialSubcategory['category_id'] ??
+          initialSubcategory['categoryId'] ??
+          (initialSubcategory['category'] is Map ? initialSubcategory['category']['id'] : null) ??
+          initialSubcategory['parent_id'] ??
+          initialSubcategory['parentId'];
+      selectedParentId = int.tryParse(rawCat?.toString() ?? '');
+    }
+
+    if (selectedParentId == null || (availableIds.isNotEmpty && !availableIds.contains(selectedParentId))) {
+      if (_selectedFilterParentCategoryId != null && availableIds.contains(_selectedFilterParentCategoryId)) {
+        selectedParentId = _selectedFilterParentCategoryId;
+      } else if (availableIds.isNotEmpty) {
+        selectedParentId = availableIds.first;
+      }
+    }
+
+    // Build resilient dropdown items list
+    final List<DropdownMenuItem<int>> dropdownItems = [];
+    for (final c in _categories) {
+      final cid = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+      if (cid > 0) {
+        dropdownItems.add(
+          DropdownMenuItem<int>(
+            value: cid,
+            child: Text(c['name']?.toString() ?? 'Category #$cid'),
+          ),
+        );
+      }
+    }
+
+    // If selectedParentId is still not in dropdownItems, insert it so DropdownButton never fails
+    if (selectedParentId != null && !dropdownItems.any((item) => item.value == selectedParentId)) {
+      final fallbackName = initialSubcategory != null
+          ? (initialSubcategory['category_name']?.toString() ?? 'Category #$selectedParentId')
+          : 'Category #$selectedParentId';
+      dropdownItems.insert(
+        0,
+        DropdownMenuItem<int>(
+          value: selectedParentId,
+          child: Text(fallbackName),
+        ),
+      );
+    }
+
+    final nameCtrl = TextEditingController(text: isEdit ? (initialSubcategory['name']?.toString() ?? '') : '');
+    final slugCtrl = TextEditingController(text: isEdit ? (initialSubcategory['slug']?.toString() ?? '') : '');
+    final imageCtrl = TextEditingController(text: isEdit ? (initialSubcategory['image']?.toString() ?? '') : '');
     bool isUploadingImage = false;
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -545,12 +594,14 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   DropdownButtonFormField<int>(
                     value: selectedParentId,
                     decoration: const InputDecoration(filled: true, fillColor: Color(0xFFF8FAFC)),
-                    items: _categories.map((c) {
-                      return DropdownMenuItem<int>(
-                        value: c['id'] as int,
-                        child: Text(c['name'] ?? 'Category'),
-                      );
-                    }).toList(),
+                    items: dropdownItems.isEmpty
+                        ? [
+                            const DropdownMenuItem<int>(
+                              value: 1,
+                              child: Text('Default Category'),
+                            ),
+                          ]
+                        : dropdownItems,
                     onChanged: (val) {
                       setModalState(() {
                         selectedParentId = val;
@@ -682,59 +733,88 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   const SizedBox(height: 20),
 
                   ElevatedButton(
-                    onPressed: () async {
-                      final name = nameCtrl.text.trim();
-                      if (name.isEmpty || selectedParentId == null) return;
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final name = nameCtrl.text.trim();
+                            if (name.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please enter a subcategory name.'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                              return;
+                            }
 
-                      final nav = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
+                            final int parentIdToSave = selectedParentId ??
+                                (_selectedFilterParentCategoryId ??
+                                    (availableIds.isNotEmpty ? availableIds.first : 1));
 
-                      final parentCat = _categories.firstWhere((c) => c['id'] == selectedParentId, orElse: () => {'name': ''});
+                            setModalState(() => isSaving = true);
+                            final messenger = ScaffoldMessenger.of(context);
+                            final nav = Navigator.of(context);
 
-                      final payload = {
-                        'category_id': selectedParentId,
-                        'name': name,
-                        'slug': slugCtrl.text.trim().isEmpty ? name.toLowerCase().replaceAll(' ', '-') : slugCtrl.text.trim(),
-                        'image': imageCtrl.text.trim(),
-                        'description': name,
-                        'status': 'active',
-                      };
+                            final payload = {
+                              'category_id': parentIdToSave,
+                              'name': name,
+                              'slug': slugCtrl.text.trim().isEmpty
+                                  ? name.toLowerCase().replaceAll(' ', '-')
+                                  : slugCtrl.text.trim(),
+                              if (imageCtrl.text.trim().isNotEmpty)
+                                'image': imageCtrl.text.trim(),
+                              'description': name,
+                              'status': 'active',
+                            };
 
-                      if (isEdit) {
-                        final id = initialSubcategory['id'] as int;
-                        await _apiService.updateSubcategory(id, payload);
-                        setState(() {
-                          initialSubcategory['name'] = name;
-                          initialSubcategory['slug'] = payload['slug'];
-                          initialSubcategory['categoryId'] = selectedParentId;
-                          initialSubcategory['category_name'] = parentCat['name'];
-                        });
-                      } else {
-                        await _apiService.createSubcategory(payload);
-                        setState(() {
-                          _subcategories.add({
-                            'id': DateTime.now().millisecondsSinceEpoch,
-                            ...payload,
-                          });
-                        });
-                      }
+                            Map<String, dynamic> result;
+                            if (isEdit) {
+                              final id = int.tryParse(initialSubcategory['id']?.toString() ?? '0') ?? 0;
+                              result = await _apiService.updateSubcategory(id, payload);
+                            } else {
+                              result = await _apiService.createSubcategory(payload);
+                            }
 
-                      nav.pop();
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(isEdit ? 'Subcategory updated!' : 'Subcategory created successfully!'),
-                          backgroundColor: AppColors.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                            if (!mounted) return;
+
+                            if (result['success'] != true) {
+                              setModalState(() => isSaving = false);
+                              final errMsg = result['message']?.toString() ?? 'Failed to save subcategory';
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Server Error: $errMsg'),
+                                  backgroundColor: AppColors.error,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // Reload real subcategories from live backend database
+                            await _loadSubcategories();
+
+                            nav.pop();
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(isEdit ? 'Subcategory updated in DB!' : 'Subcategory created in DB successfully!'),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(isEdit ? 'Update Subcategory' : 'Save Subcategory'),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(isEdit ? 'Update Subcategory' : 'Save Subcategory'),
                   ),
                 ],
               ),
@@ -910,7 +990,10 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
   Widget _buildSubcategoriesTab() {
     final filteredSubcats = _selectedFilterParentCategoryId == null
         ? _subcategories
-        : _subcategories.where((s) => (s['categoryId'] ?? s['category_id']) == _selectedFilterParentCategoryId).toList();
+        : _subcategories.where((s) {
+            final pid = s['categoryId']?.toString() ?? s['category_id']?.toString() ?? '';
+            return pid == _selectedFilterParentCategoryId.toString();
+          }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -976,78 +1059,92 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final item = filteredSubcats[index];
-                          final int id = item['id'];
-                          final String name = item['name'] ?? 'Subcategory';
-                          final String slug = item['slug'] ?? name.toLowerCase().replaceAll(' ', '-');
-                          final String parentName = item['category_name'] ?? 'Parent Category';
-                          final String? image = item['image'];
+                          final int id = int.tryParse(item['id']?.toString() ?? '0') ?? 0;
+                          final String name = item['name']?.toString() ?? 'Subcategory';
+                          final String slug = item['slug']?.toString() ?? name.toLowerCase().replaceAll(' ', '-');
+                          final String parentIdStr = (item['category_id'] ?? item['categoryId'] ?? '').toString();
+                          final parentCat = _categories.firstWhere(
+                            (c) => c['id']?.toString() == parentIdStr,
+                            orElse: () => {'name': item['category_name']?.toString() ?? 'Parent Category'},
+                          );
+                          final String parentName = parentCat['name']?.toString() ?? 'Parent Category';
+                          final String? image = item['image']?.toString();
 
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.02),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
+                              onTap: () => _showSubcategoryModalForm(initialSubcategory: Map<String, dynamic>.from(item)),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.02),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                // Image Thumbnail
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: image != null && image.isNotEmpty
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Image.network(
-                                            image,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted),
+                                child: Row(
+                                  children: [
+                                    // Image Thumbnail
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      ),
+                                      child: image != null && image.isNotEmpty
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(12),
+                                              child: Image.network(
+                                                image,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) => const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted),
+                                              ),
+                                            )
+                                          : const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted, size: 24),
+                                    ),
+                                    const SizedBox(width: 14),
+
+                                    // Details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
                                           ),
-                                        )
-                                      : const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted, size: 24),
-                                ),
-                                const SizedBox(width: 14),
-
-                                // Details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Parent: $parentName • /$slug',
+                                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Parent: $parentName • /$slug',
-                                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                    ),
 
-                                // Edit & Delete Actions
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
-                                  onPressed: () => _showSubcategoryModalForm(initialSubcategory: item),
+                                    // Edit & Delete Actions
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
+                                      tooltip: 'Edit Subcategory',
+                                      onPressed: () => _showSubcategoryModalForm(initialSubcategory: Map<String, dynamic>.from(item)),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                                      tooltip: 'Delete Subcategory',
+                                      onPressed: () => _deleteSubcategory(id, name),
+                                    ),
+                                  ],
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                                  onPressed: () => _deleteSubcategory(id, name),
-                                ),
-                              ],
+                              ),
                             ),
                           );
                         },

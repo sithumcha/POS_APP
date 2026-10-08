@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/receipt_screen.dart';
+import 'swipe_to_confirm.dart';
+import 'currency_text.dart';
 
 class CartCheckoutSheet extends StatefulWidget {
   final List<Map<String, dynamic>> cartItems;
@@ -60,8 +63,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   double get _subtotal {
     double total = 0.0;
     for (var item in _localCart) {
-      final double unitPrice = ((item['unit_price'] ?? item['price'] ?? 0.0) as num).toDouble();
-      final int qty = (item['quantity'] as num? ?? 1).toInt();
+      final double unitPrice = double.tryParse((item['unit_price'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
+      final int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
       total += (unitPrice * qty);
     }
     return total;
@@ -86,13 +89,13 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
   void _updateQuantity(int index, int delta) {
     setState(() {
-      final currentQty = (_localCart[index]['quantity'] as num).toInt();
+      final currentQty = int.tryParse(_localCart[index]['quantity']?.toString() ?? '1') ?? 1;
       final newQty = currentQty + delta;
       if (newQty <= 0) {
         _localCart.removeAt(index);
       } else {
         _localCart[index]['quantity'] = newQty;
-        final double unitPrice = ((_localCart[index]['unit_price'] ?? _localCart[index]['price'] ?? 0.0) as num).toDouble();
+        final double unitPrice = double.tryParse((_localCart[index]['unit_price'] ?? _localCart[index]['price'] ?? 0.0).toString()) ?? 0.0;
         _localCart[index]['total_price'] = unitPrice * newQty;
       }
     });
@@ -150,6 +153,9 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
       changeAmount: _changeDue >= 0 ? _changeDue : 0.0,
       items: _localCart,
     );
+
+    // Trigger push notification to Phone Notification Bar & In-app center
+    NotificationService().triggerOrderCompletionNotification(context, _grandTotal);
 
     // Show Printable Receipt Modal Confirmation
     showDialog(
@@ -256,8 +262,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                           itemBuilder: (context, index) {
                             final item = _localCart[index];
                             final name = item['name'] ?? 'Product';
-                            final int qty = (item['quantity'] as num? ?? 1).toInt();
-                            final double unitPrice = ((item['unit_price'] ?? item['price'] ?? 0.0) as num).toDouble();
+                            final int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+                            final double unitPrice = double.tryParse((item['unit_price'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
                             final double itemTotal = unitPrice * qty;
 
                             final dynamic vars = item['variations'];
@@ -526,10 +532,11 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                   runSpacing: 8,
                                   children: [
                                     _buildPresetChip('Exact Cash (LKR ${_grandTotal.toStringAsFixed(0)})', _grandTotal.toStringAsFixed(0), isPrimary: true),
-                                    _buildPresetChip('+ LKR 500', '500'),
-                                    _buildPresetChip('+ LKR 1,000', '1000'),
-                                    _buildPresetChip('+ LKR 2,000', '2000'),
-                                    _buildPresetChip('+ LKR 5,000', '5000'),
+                                    _buildPresetChip('+ 500', '+500'),
+                                    _buildPresetChip('+ 1,000', '+1000'),
+                                    _buildPresetChip('+ 2,000', '+2000'),
+                                    _buildPresetChip('+ 5,000', '+5000'),
+                                    _buildPresetChip('Clear', 'CLEAR', isDanger: true),
                                   ],
                                 ),
                                 const SizedBox(height: 14),
@@ -692,31 +699,37 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                   ),
           ),
 
-          // Action Button
+          // Action Button (Slide to Confirm / Swipe to Pay)
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
             ),
             child: SafeArea(
               top: false,
-              child: ElevatedButton.icon(
-                onPressed: _localCart.isEmpty ? null : _handleCompleteOrder,
-                icon: const Icon(Icons.print_outlined, color: Colors.white),
-                label: Text(
-                  'Complete Order & Print Bill • LKR ${_grandTotal.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwipeToConfirmButton(
+                    label: 'Slide to Pay • LKR ${_grandTotal.toStringAsFixed(2)}',
+                    onConfirmed: _handleCompleteOrder,
+                    isEnabled: _localCart.isNotEmpty && (_selectedPaymentMethod != 0 || _changeDue >= 0),
+                    backgroundColor: AppColors.primary,
                   ),
-                  elevation: 0,
-                ),
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    onPressed: (_localCart.isNotEmpty && (_selectedPaymentMethod != 0 || _changeDue >= 0))
+                        ? _handleCompleteOrder
+                        : null,
+                    icon: const Icon(Icons.touch_app_rounded, size: 16),
+                    label: const Text('Or tap to confirm directly', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -762,36 +775,50 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     );
   }
 
-  Widget _buildPresetChip(String label, String value, {bool isPrimary = false}) {
+  Widget _buildPresetChip(String label, String value, {bool isPrimary = false, bool isDanger = false}) {
     return InkWell(
       onTap: () {
         setState(() {
-          _cashTenderedInput = value;
+          if (value == 'CLEAR') {
+            _cashTenderedInput = '';
+          } else if (value.startsWith('+')) {
+            final current = int.tryParse(_cashTenderedInput) ?? 0;
+            final add = int.tryParse(value.substring(1)) ?? 0;
+            _cashTenderedInput = '${current + add}';
+          } else {
+            _cashTenderedInput = value;
+          }
         });
       },
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isPrimary ? Colors.black : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isPrimary ? Colors.black : const Color(0xFFCBD5E1)),
-          boxShadow: isPrimary
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
+          color: isPrimary
+              ? AppColors.primary
+              : isDanger
+                  ? const Color(0xFFFEF2F2)
+                  : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isPrimary
+                ? AppColors.primary
+                : isDanger
+                    ? const Color(0xFFFCA5A5)
+                    : const Color(0xFFE2E8F0),
+          ),
+          boxShadow: isPrimary ? AppColors.softShadow : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: isPrimary ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w700,
+            color: isPrimary
+                ? Colors.white
+                : isDanger
+                    ? AppColors.error
+                    : AppColors.textPrimary,
           ),
         ),
       ),

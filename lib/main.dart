@@ -3,10 +3,14 @@ import 'screens/login_screen.dart';
 import 'screens/pos_screen.dart';
 import 'services/api_service.dart';
 import 'services/offline_sync_service.dart';
+import 'services/notification_service.dart';
+import 'services/permission_service.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().initialize();
+  await PermissionService().requestAllAppPermissions();
   OfflineSyncService().startPeriodicSync();
   runApp(const PosApp());
 }

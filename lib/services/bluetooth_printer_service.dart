@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'permission_service.dart';
+import 'notification_service.dart';
 
 class BluetoothPrinterService {
   static final BluetoothPrinterService _instance = BluetoothPrinterService._internal();
@@ -35,6 +37,9 @@ class BluetoothPrinterService {
   List<Map<String, String>> get availableDevices => List.unmodifiable(_availableDevices);
 
   Future<List<Map<String, String>>> scanDevices() async {
+    // Request Bluetooth and Location permission before scanning
+    await PermissionService().requestBluetoothPermissions();
+
     _isScanning = true;
     await Future.delayed(const Duration(seconds: 2));
     _isScanning = false;
@@ -44,12 +49,21 @@ class BluetoothPrinterService {
   Future<bool> connectDevice(Map<String, String> device) async {
     await Future.delayed(const Duration(milliseconds: 800));
     _connectedDevice = device;
+    NotificationService().triggerBluetoothNotification(
+      printerName: device['name'] ?? 'Thermal Printer',
+      connected: true,
+    );
     return true;
   }
 
   Future<void> disconnectDevice() async {
+    final name = _connectedDevice?['name'] ?? 'Thermal Printer';
     await Future.delayed(const Duration(milliseconds: 300));
     _connectedDevice = null;
+    NotificationService().triggerBluetoothNotification(
+      printerName: name,
+      connected: false,
+    );
   }
 
   /// Format receipt text for 58mm Thermal Printer (32 Characters width per line)
@@ -100,12 +114,12 @@ class BluetoothPrinterService {
 
     for (var item in orderItems) {
       final name = (item['name'] ?? 'Item').toString();
-      final qty = (item['quantity'] as num? ?? 1).toInt();
-      final unitPrice = (item['price'] ?? item['unit_price'] ?? 0.0) as num;
-      final totalPrice = (item['total_price'] ?? (unitPrice * qty)) as num;
+      final qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+      final unitPrice = double.tryParse((item['price'] ?? item['unit_price'] ?? 0.0).toString()) ?? 0.0;
+      final totalPrice = double.tryParse((item['total_price'] ?? (unitPrice * qty)).toString()) ?? (unitPrice * qty);
 
       sb.writeln(name);
-      final priceDetail = '$qty x ${unitPrice.toStringAsFixed(0)}';
+      final priceDetail = '$qty x ${unitPrice.toStringAsFixed(2)}';
       final totalStr = 'LKR ${totalPrice.toStringAsFixed(2)}';
       sb.writeln(twoColumn('  $priceDetail', totalStr));
     }

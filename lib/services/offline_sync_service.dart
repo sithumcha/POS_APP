@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'api_service.dart';
+import 'notification_service.dart';
 
 class OfflineSyncService {
   static final OfflineSyncService _instance = OfflineSyncService._internal();
@@ -18,11 +19,13 @@ class OfflineSyncService {
 
   static const String _keyPendingOrders = 'offline_pending_orders';
   static const String _keyPendingCategories = 'offline_pending_categories';
+  static const String _keyPendingSubcategories = 'offline_pending_subcategories';
   static const String _keyPendingProducts = 'offline_pending_products';
 
   /// Start background periodic auto-sync engine (runs every 15s)
   void startPeriodicSync() {
     _periodicSyncTimer?.cancel();
+    _apiService.purgeUnsyncedStaffMembers(); // Clean out rejected local staff items
     _periodicSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       await syncAllPending();
     });
@@ -107,6 +110,44 @@ class OfflineSyncService {
   }
 
   // ==========================================
+  // --- 2.1 SUBCATEGORIES OFFLINE QUEUE ---
+  // ==========================================
+
+  Future<List<Map<String, dynamic>>> getPendingSubcategories() async {
+    try {
+      final str = await _storage.read(key: _keyPendingSubcategories);
+      if (str != null && str.isNotEmpty) {
+        final decoded = jsonDecode(str);
+        if (decoded is List) {
+          return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> queueSubcategoryAction({
+    required String action, // 'create', 'update', 'delete'
+    required Map<String, dynamic> data,
+    int? id,
+  }) async {
+    try {
+      final list = await getPendingSubcategories();
+      list.add({
+        'queue_id': 'SUBCAT-Q-${DateTime.now().millisecondsSinceEpoch}',
+        'action': action,
+        'id': id,
+        'data': data,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await _storage.write(key: _keyPendingSubcategories, value: jsonEncode(list));
+      debugPrint('[OfflineSync] Queued subcategory $action. Total pending: ${list.length}');
+    } catch (e) {
+      debugPrint('[OfflineSync] Error queueing subcategory action: $e');
+    }
+  }
+
+  // ==========================================
   // --- 3. PRODUCTS OFFLINE QUEUE ---
   // ==========================================
 
@@ -151,11 +192,44 @@ class OfflineSyncService {
   Future<int> getTotalPendingCount() async {
     final orders = await getPendingOrders();
     final cats = await getPendingCategories();
+    final subcats = await getPendingSubcategories();
     final prods = await getPendingProducts();
     final staff = (await _apiService.getLocalStaffMembers())
         .where((s) => s['is_synced'] != true)
         .length;
-    return orders.length + cats.length + prods.length + staff;
+    return orders.length + cats.length + subcats.length + prods.length + staff;
+  }
+
+  /// Get comprehensive summary of all queues with details
+  Future<Map<String, dynamic>> getPendingSummary() async {
+    final orders = await getPendingOrders();
+    final cats = await getPendingCategories();
+    final subcats = await getPendingSubcategories();
+    final prods = await getPendingProducts();
+    final staff = (await _apiService.getLocalStaffMembers())
+        .where((s) => s['is_synced'] != true)
+        .toList();
+
+    return {
+      'total': orders.length + cats.length + subcats.length + prods.length + staff.length,
+      'orders': orders,
+      'categories': cats,
+      'subcategories': subcats,
+      'products': prods,
+      'staff': staff,
+    };
+  }
+
+  Future<void> clearAllPending() async {
+    await _storage.delete(key: _keyPendingOrders);
+    await _storage.delete(key: _keyPendingCategories);
+    await _storage.delete(key: _keyPendingSubcategories);
+    await _storage.delete(key: _keyPendingProducts);
+    await _apiService.purgeUnsyncedStaffMembers();
+  }
+
+  Future<void> dismissPendingStaff(String email) async {
+    await _apiService.removeLocalStaffMember(email);
   }
 
   // ==========================================
@@ -170,6 +244,7 @@ class OfflineSyncService {
     _isSyncing = true;
     int syncedOrders = 0;
     int syncedCategories = 0;
+    int syncedSubcategories = 0;
     int syncedProducts = 0;
 
     try {
@@ -251,6 +326,46 @@ class OfflineSyncService {
       }
       await _storage.write(key: _keyPendingCategories, value: jsonEncode(remainingCats));
 
+      // 3.1 Sync Subcategories Queue
+      final pendingSubcats = await getPendingSubcategories();
+      final remainingSubcats = <Map<String, dynamic>>[];
+      for (final item in pendingSubcats) {
+        try {
+          final action = item['action']?.toString();
+          final data = item['data'] as Map<String, dynamic>? ?? {};
+          final id = item['id'];
+
+          http.Response? res;
+          if (action == 'create') {
+            res = await http.post(
+              Uri.parse('$baseUrl/subcategories'),
+              headers: headers,
+              body: jsonEncode(data),
+            ).timeout(const Duration(seconds: 6));
+          } else if (action == 'update' && id != null) {
+            res = await http.put(
+              Uri.parse('$baseUrl/subcategories/$id'),
+              headers: headers,
+              body: jsonEncode(data),
+            ).timeout(const Duration(seconds: 6));
+          } else if (action == 'delete' && id != null) {
+            res = await http.delete(
+              Uri.parse('$baseUrl/subcategories/$id'),
+              headers: headers,
+            ).timeout(const Duration(seconds: 5));
+          }
+
+          if (res != null && (res.statusCode == 200 || res.statusCode == 201 || res.statusCode == 204)) {
+            syncedSubcategories++;
+          } else {
+            remainingSubcats.add(item);
+          }
+        } catch (_) {
+          remainingSubcats.add(item);
+        }
+      }
+      await _storage.write(key: _keyPendingSubcategories, value: jsonEncode(remainingSubcats));
+
       // 4. Sync Products Queue
       final pendingProds = await getPendingProducts();
       final remainingProds = <Map<String, dynamic>>[];
@@ -316,6 +431,14 @@ class OfflineSyncService {
       await _storage.write(key: _keyPendingOrders, value: jsonEncode(remainingOrders));
 
       debugPrint('[OfflineSync] Batch sync completed. Synced: $syncedOrders orders, $syncedProducts products, $syncedCategories categories.');
+
+      final totalSynced = syncedOrders + syncedProducts + syncedCategories;
+      if (totalSynced > 0) {
+        NotificationService().triggerSyncNotification(
+          count: totalSynced,
+          details: 'Synced $syncedOrders orders, $syncedProducts products, $syncedCategories categories to cloud.',
+        );
+      }
 
       return {
         'success': true,

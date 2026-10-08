@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/currency_text.dart';
 import '../widgets/product_image_widget.dart';
+import '../widgets/shimmer_loading.dart';
 import 'product_form_screen.dart';
 
 class ProductListScreen extends StatefulWidget {
@@ -54,11 +57,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   Future<void> _deleteProduct(int productId, String productName) async {
-    // Confirmation Alert Box
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
@@ -70,7 +72,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -123,7 +125,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
       final matchesQuery = query.isEmpty || name.contains(query) || sku.contains(query);
 
-      final stock = (item['stock'] as num? ?? 10).toInt();
+      final stock = int.tryParse(item['stock']?.toString() ?? '10') ?? 10;
       bool matchesStock = true;
       if (_selectedStockFilter == 'Low Stock') {
         matchesStock = stock < 5;
@@ -133,6 +135,71 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
       return matchesQuery && matchesStock;
     }).toList();
+  }
+
+  // KPI Calculations
+  int get _totalCount => _products.length;
+  int get _lowStockCount => _products.where((p) => (int.tryParse(p['stock']?.toString() ?? '10') ?? 10) < 5).length;
+  double get _totalInventoryValue => _products.fold<double>(0.0, (sum, p) {
+        final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
+        final price = double.tryParse((p['base_price'] ?? p['price'] ?? 0.0).toString()) ?? 0.0;
+        return sum + (stock * price);
+      });
+
+  Widget _buildKpiCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required Widget valueWidget,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: iconColor),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          valueWidget,
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -145,34 +212,100 @@ class _ProductListScreenState extends State<ProductListScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Inventory & Catalog',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.w900,
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
             fontSize: 18,
           ),
         ),
         centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.black),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary),
             onPressed: _loadProducts,
           ),
         ],
       ),
       body: Column(
         children: [
-          // --- 1. SEARCH BAR & FILTERS HEADER ---
+          // --- 1. METRIC OVERVIEW CARDS (Item 5) ---
           Container(
-            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: SizedBox(
+              height: 106,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  SizedBox(
+                    width: 150,
+                    child: _buildKpiCard(
+                      icon: Icons.inventory_2_rounded,
+                      iconColor: AppColors.accent,
+                      iconBg: AppColors.accentLight,
+                      title: 'Total Items',
+                      valueWidget: Text(
+                        '$_totalCount',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      subtitle: 'Active in catalog',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 150,
+                    child: _buildKpiCard(
+                      icon: Icons.warning_amber_rounded,
+                      iconColor: _lowStockCount > 0 ? const Color(0xFFEF4444) : AppColors.emerald,
+                      iconBg: _lowStockCount > 0 ? const Color(0xFFFEF2F2) : AppColors.emeraldLight,
+                      title: 'Low Stock',
+                      valueWidget: Text(
+                        '$_lowStockCount',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: _lowStockCount > 0 ? const Color(0xFFEF4444) : AppColors.textPrimary,
+                        ),
+                      ),
+                      subtitle: _lowStockCount > 0 ? 'Needs reordering' : 'Stock healthy',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 180,
+                    child: _buildKpiCard(
+                      icon: Icons.account_balance_wallet_rounded,
+                      iconColor: AppColors.emerald,
+                      iconBg: AppColors.emeraldLight,
+                      title: 'Catalog Value',
+                      valueWidget: CurrencyText(
+                        amount: _totalInventoryValue,
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
+                      subtitle: 'Total retail worth',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // --- 2. SEARCH BAR & FILTERS HEADER ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
             color: Colors.white,
             child: Column(
               children: [
-                // Live Search Bar
                 TextField(
                   controller: _searchController,
                   onChanged: (val) {
@@ -203,7 +336,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // Stock Filter Chips Row
                 SingleChildScrollView(
@@ -211,24 +344,55 @@ class _ProductListScreenState extends State<ProductListScreen> {
                   child: Row(
                     children: ['All', 'Low Stock', 'In Stock'].map((filter) {
                       final isSelected = _selectedStockFilter == filter;
+                      int count = _products.length;
+                      if (filter == 'Low Stock') count = _lowStockCount;
+                      if (filter == 'In Stock') count = _products.length - _lowStockCount;
+
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
-                          label: Text(filter),
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(filter),
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? Colors.white.withOpacity(0.25) : const Color(0xFFE2E8F0),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                           selected: isSelected,
                           onSelected: (_) {
                             setState(() {
                               _selectedStockFilter = filter;
                             });
                           },
-                          selectedColor: Colors.black,
+                          selectedColor: AppColors.primary,
                           backgroundColor: const Color(0xFFF1F5F9),
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+                            ),
+                          ),
                         ),
                       );
                     }).toList(),
@@ -239,25 +403,41 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ),
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-          // --- 2. PRODUCT LIST TILES ---
+          // --- 3. PRODUCT LIST TILES (Shimmer Loading Skeletons - Item 3) ---
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 6,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, __) => const ProductListSkeleton(),
+                  )
                 : filtered.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            const Text(
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.textMuted),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
                               'No products found',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               _searchQuery.isNotEmpty ? 'Try a different search term' : 'Add products to your catalog',
-                              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                              style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textMuted),
                             ),
                           ],
                         ),
@@ -268,14 +448,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final item = filtered[index];
-                          final int id = item['id'];
-                          final String name = item['name'] ?? 'Product Name';
-                          final String sku = item['sku'] ?? 'SKU-000';
-                          final double basePrice = ((item['base_price'] ?? item['price'] ?? 0.0) as num).toDouble();
+                          final int id = int.tryParse(item['id']?.toString() ?? '0') ?? 0;
+                          final String name = item['name']?.toString() ?? 'Product Name';
+                          final String sku = item['sku']?.toString() ?? 'SKU-000';
+                          final double basePrice = double.tryParse((item['base_price'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
                           final double? discountPrice = item['discount_price'] != null
-                              ? ((item['discount_price']) as num).toDouble()
+                              ? double.tryParse(item['discount_price'].toString())
                               : null;
-                          final int stock = (item['stock'] as num? ?? 10).toInt();
+                          final int stock = int.tryParse(item['stock']?.toString() ?? '10') ?? 10;
                           final bool isLowStock = stock < 5;
 
                           return Container(
@@ -284,13 +464,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.02),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
+                              boxShadow: AppColors.softShadow,
                             ),
                             child: Row(
                               children: [
@@ -312,10 +486,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                         name,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
+                                        style: GoogleFonts.plusJakartaSans(
                                           fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
@@ -323,7 +497,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                         'SKU: $sku',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textMuted,
+                                        ),
                                       ),
                                       const SizedBox(height: 6),
                                       Wrap(
@@ -331,32 +509,24 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                         spacing: 6,
                                         runSpacing: 4,
                                         children: [
-                                          // Price
+                                          // Price Display with Tabular Figures CurrencyText (Item 2)
                                           if (discountPrice != null) ...[
-                                            Text(
-                                              'LKR ${discountPrice.toStringAsFixed(0)}',
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black,
-                                              ),
+                                            CurrencyText(
+                                              amount: discountPrice,
+                                              fontSize: 14,
+                                              color: AppColors.textPrimary,
                                             ),
-                                            Text(
-                                              'LKR ${basePrice.toStringAsFixed(0)}',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.textMuted,
-                                                decoration: TextDecoration.lineThrough,
-                                              ),
+                                            CurrencyText(
+                                              amount: basePrice,
+                                              fontSize: 11,
+                                              color: AppColors.textMuted,
+                                              decoration: TextDecoration.lineThrough,
                                             ),
                                           ] else
-                                            Text(
-                                              'LKR ${basePrice.toStringAsFixed(0)}',
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black,
-                                              ),
+                                            CurrencyText(
+                                              amount: basePrice,
+                                              fontSize: 14,
+                                              color: AppColors.textPrimary,
                                             ),
 
                                           // Stock Badge
@@ -373,7 +543,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                               isLowStock ? 'Low Stock ($stock)' : 'In Stock ($stock)',
                                               style: TextStyle(
                                                 fontSize: 10,
-                                                fontWeight: FontWeight.bold,
+                                                fontWeight: FontWeight.w700,
                                                 color: isLowStock ? const Color(0xFFDC2626) : const Color(0xFF059669),
                                               ),
                                             ),
@@ -388,7 +558,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                 Row(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
+                                      icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
                                       onPressed: () => _openProductFormScreen(initialProduct: item),
                                     ),
                                     IconButton(
@@ -406,13 +576,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
         ],
       ),
 
-      // --- 3. FLOATING ACTION BUTTON (FAB +) ---
+      // --- 4. FLOATING ACTION BUTTON (FAB +) ---
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openProductFormScreen(),
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        elevation: 4,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Product', style: TextStyle(fontWeight: FontWeight.bold)),
+        label: Text(
+          'Add Product',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }

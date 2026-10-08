@@ -304,10 +304,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                         // Itemized Products Rows
                         ...widget.orderItems.map((item) {
                           final String name = item['name'] ?? 'Item';
-                          final int qty = (item['quantity'] as num? ?? 1).toInt();
-                          final double unitPrice = ((item['unit_price'] ?? item['price'] ?? 0.0) as num).toDouble();
-                          final double total = item.containsKey('total_price')
-                              ? (item['total_price'] as num).toDouble()
+                          final int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+                          final double unitPrice = double.tryParse((item['unit_price'] ?? item['price'] ?? 0.0).toString()) ?? 0.0;
+                          final double total = item.containsKey('total_price') && item['total_price'] != null
+                              ? (double.tryParse(item['total_price'].toString()) ?? (unitPrice * qty))
                               : (unitPrice * qty);
 
                           final dynamic vars = item['variations'];
@@ -333,7 +333,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                                     Expanded(
                                       flex: 2,
                                       child: Text(
-                                        '$qty x ${unitPrice.toStringAsFixed(0)}',
+                                        '$qty x ${unitPrice.toStringAsFixed(2)}',
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                       ),
