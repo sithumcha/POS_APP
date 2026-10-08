@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
@@ -203,6 +204,72 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     });
   }
 
+  Future<void> _pickAndUploadImage({
+    required ImageSource source,
+    required Function(String url) onImageSelected,
+  }) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(source: source, imageQuality: 85);
+      if (file == null) return;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 12),
+              Text('Uploading image to server database...'),
+            ],
+          ),
+          duration: Duration(seconds: 15),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final bytes = await file.readAsBytes();
+      final filename = file.name.isNotEmpty ? file.name : 'upload_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final res = await _apiService.uploadImage(bytes, filename);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (res['success'] == true && res['url'] != null && (res['url'] as String).isNotEmpty) {
+        onImageSelected(res['url'] as String);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image uploaded successfully to database!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'Failed to upload image.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Image upload error: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _openImagePickerModal({required Function(String url) onImageSelected}) {
     final urlController = TextEditingController();
 
@@ -245,17 +312,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       label: 'Upload from Gallery',
                       color: const Color(0xFF2563EB),
                       onTap: () {
-                        // Demo gallery pick - selects default high res product image
-                        onImageSelected(
-                          'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=60',
-                        );
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Image uploaded from Gallery!'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        _pickAndUploadImage(
+                          source: ImageSource.gallery,
+                          onImageSelected: onImageSelected,
                         );
                       },
                     ),
@@ -267,17 +327,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       label: 'Take Photo',
                       color: const Color(0xFF16A34A),
                       onTap: () {
-                        // Demo camera capture - selects photo stream image
-                        onImageSelected(
-                          'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=500&auto=format&fit=crop&q=60',
-                        );
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Photo captured with Camera!'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        _pickAndUploadImage(
+                          source: ImageSource.camera,
+                          onImageSelected: onImageSelected,
                         );
                       },
                     ),

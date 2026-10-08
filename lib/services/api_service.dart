@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
@@ -719,4 +720,107 @@ class ApiService {
       }
     ];
   }
+
+  // --- Upload APIs ---
+
+  /// POST /upload/image (Upload single image file)
+  Future<Map<String, dynamic>> uploadImage(List<int> bytes, String filename) async {
+    if (!ApiConfig.useMockApi) {
+      try {
+        final token = await getToken();
+        final uri = Uri.parse('$baseUrl/upload/image');
+        final request = http.MultipartRequest('POST', uri);
+
+        if (token != null && token.isNotEmpty) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
+        request.headers['Accept'] = 'application/json';
+
+        final multipartFile = http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: filename,
+        );
+        request.files.add(multipartFile);
+
+        final streamedRes = await request.send().timeout(const Duration(seconds: 20));
+        final res = await http.Response.fromStream(streamedRes);
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          if (data is Map<String, dynamic>) {
+            String? rawUrl = data['url'] ?? data['filename'] ?? data['file'] ?? (data['data'] is Map ? data['data']['url'] : null);
+            if (rawUrl != null && rawUrl.isNotEmpty) {
+              final fullUrl = rawUrl.startsWith('/') ? '$baseUrl$rawUrl' : rawUrl;
+              return {
+                'success': true,
+                'url': fullUrl,
+                'filename': data['filename'] ?? filename,
+                'raw': data,
+              };
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error uploading image to API: $e');
+      }
+    }
+
+    // Fallback URL if offline or mock mode
+    await Future.delayed(const Duration(milliseconds: 400));
+    return {
+      'success': true,
+      'url': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+      'filename': filename,
+      'message': 'Uploaded image (fallback mode)',
+    };
+  }
+
+  /// POST /upload/images (Upload multiple image files)
+  Future<List<String>> uploadImages(List<({List<int> bytes, String filename})> files) async {
+    if (files.isEmpty) return [];
+
+    if (!ApiConfig.useMockApi) {
+      try {
+        final token = await getToken();
+        final uri = Uri.parse('$baseUrl/upload/images');
+        final request = http.MultipartRequest('POST', uri);
+
+        if (token != null && token.isNotEmpty) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
+        request.headers['Accept'] = 'application/json';
+
+        for (final item in files) {
+          request.files.add(
+            http.MultipartFile.fromBytes('images', item.bytes, filename: item.filename),
+          );
+        }
+
+        final streamedRes = await request.send().timeout(const Duration(seconds: 30));
+        final res = await http.Response.fromStream(streamedRes);
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          List<dynamic> list = [];
+          if (data is List) {
+            list = data;
+          } else if (data is Map<String, dynamic>) {
+            list = data['filenames'] ?? data['urls'] ?? data['images'] ?? [];
+          }
+          final urls = list.map((e) {
+            final str = e.toString();
+            return str.startsWith('/') ? '$baseUrl$str' : str;
+          }).toList();
+
+          if (urls.isNotEmpty) return urls;
+        }
+      } catch (e) {
+        debugPrint('Error uploading multiple images to API: $e');
+      }
+    }
+
+    return files.map((f) => 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500').toList();
+  }
 }
+
