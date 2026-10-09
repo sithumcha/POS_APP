@@ -36,13 +36,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
     super.dispose();
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadProducts({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final data = await _apiService.getProducts();
+      final data = await _apiService.getProducts(forceRefresh: forceRefresh);
       if (!mounted) return;
       setState(() {
         _products = data;
@@ -227,7 +227,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary),
-            onPressed: _loadProducts,
+            onPressed: () => _loadProducts(forceRefresh: true),
           ),
         ],
       ),

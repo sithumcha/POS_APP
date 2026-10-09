@@ -107,7 +107,7 @@ class CatalogSyncRepository {
       final remote = await _apiService.getCategories();
       if (remote.isNotEmpty) return remote;
     } catch (_) {}
-    return await _apiService.getCategories();
+    return [];
   }
 
   Future<List<dynamic>> getCachedOrRemoteProducts() async {
@@ -115,6 +115,6 @@ class CatalogSyncRepository {
       final remote = await _apiService.getProducts();
       if (remote.isNotEmpty) return remote;
     } catch (_) {}
-    return await _apiService.getProducts();
+    return [];
   }
 }

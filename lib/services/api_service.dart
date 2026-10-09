@@ -21,30 +21,70 @@ class ApiService {
   static String get baseUrl => ApiConfig.baseUrl;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  Future<String?> getToken() async => await _storage.read(key: 'jwt_token');
+  // Persistent HTTP client for Keep-Alive connection pooling
+  static final http.Client _client = http.Client();
 
-  Future<void> saveToken(String token) async =>
-      await _storage.write(key: 'jwt_token', value: token);
+  // In-memory token cache (avoids async secure storage read on every API call)
+  static String? _cachedToken;
+  static Map<String, String>? _cachedHeaders;
+
+  // In-memory catalog response caching for instant UI navigation (0 ms)
+  static List<dynamic>? _cachedCategories;
+  static DateTime? _categoriesCacheTime;
+
+  static List<dynamic>? _cachedProducts;
+  static DateTime? _productsCacheTime;
+
+  static final Map<int, List<dynamic>> _cachedSubcategoriesByCat = {};
+  static final Map<int, DateTime> _subcatCacheTimes = {};
+
+  /// Invalidate memory cache on product or category mutations
+  static void invalidateCatalogCache() {
+    _cachedCategories = null;
+    _cachedProducts = null;
+    _cachedSubcategoriesByCat.clear();
+    _subcatCacheTimes.clear();
+  }
+
+  Future<String?> getToken() async {
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) return _cachedToken;
+    _cachedToken = await _storage.read(key: 'jwt_token');
+    return _cachedToken;
+  }
+
+  Future<void> saveToken(String token) async {
+    _cachedToken = token;
+    _cachedHeaders = null;
+    await _storage.write(key: 'jwt_token', value: token);
+  }
 
   Future<void> clearToken() async {
+    _cachedToken = null;
+    _cachedHeaders = null;
+    invalidateCatalogCache();
     await _storage.delete(key: 'jwt_token');
     await _storage.delete(key: 'user_info');
   }
 
   Future<Map<String, String>> _headers() async {
     final token = await getToken();
-    return {
+    if (_cachedHeaders != null && _cachedHeaders!['Authorization'] == (token != null && token.isNotEmpty ? 'Bearer $token' : null)) {
+      return _cachedHeaders!;
+    }
+    final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
+    _cachedHeaders = headers;
+    return headers;
   }
 
   /// Real-time Health Check to ping live server
   Future<Map<String, dynamic>> checkServerHealth() async {
     final stopwatch = Stopwatch()..start();
     try {
-      final res = await http.get(
+      final res = await _client.get(
         Uri.parse('$baseUrl/categories'),
       ).timeout(const Duration(seconds: 4));
       stopwatch.stop();
@@ -794,28 +834,39 @@ class ApiService {
   // --- Categories APIs ---
 
   /// GET /categories
-  Future<List<dynamic>> getCategories() async {
+  Future<List<dynamic>> getCategories({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedCategories != null && _categoriesCacheTime != null) {
+      if (DateTime.now().difference(_categoriesCacheTime!).inSeconds < 60) {
+        return _cachedCategories!;
+      }
+    }
     try {
-      final res = await http.get(
+      final res = await _client.get(
         Uri.parse('$baseUrl/categories'),
         headers: await _headers(),
       ).timeout(const Duration(milliseconds: 6000));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data is List) return data;
-        if (data is Map && data['data'] is List) return data['data'];
-        if (data is Map && data['categories'] is List) return data['categories'];
+        List<dynamic>? result;
+        if (data is List) result = data;
+        else if (data is Map && data['data'] is List) result = data['data'];
+        else if (data is Map && data['categories'] is List) result = data['categories'];
+        if (result != null) {
+          _cachedCategories = result;
+          _categoriesCacheTime = DateTime.now();
+          return result;
+        }
       }
     } catch (e) {
       debugPrint('getCategories error: $e');
     }
-    return [];
+    return _cachedCategories ?? [];
   }
 
   /// GET /categories/{id}
   Future<Map<String, dynamic>> getCategoryById(int id) async {
     try {
-      final res = await http.get(
+      final res = await _client.get(
         Uri.parse('$baseUrl/categories/$id'),
         headers: await _headers(),
       );
@@ -831,8 +882,9 @@ class ApiService {
 
   /// POST /categories
   Future<bool> createCategory(Map<String, dynamic> data) async {
+    invalidateCatalogCache();
     try {
-      final res = await http.post(
+      final res = await _client.post(
         Uri.parse('$baseUrl/categories'),
         headers: await _headers(),
         body: jsonEncode({
@@ -856,8 +908,9 @@ class ApiService {
 
   /// PUT /categories/{id}
   Future<bool> updateCategory(int id, Map<String, dynamic> data) async {
+    invalidateCatalogCache();
     try {
-      final res = await http.put(
+      final res = await _client.put(
         Uri.parse('$baseUrl/categories/$id'),
         headers: await _headers(),
         body: jsonEncode({
@@ -881,8 +934,9 @@ class ApiService {
 
   /// DELETE /categories/{id}
   Future<bool> deleteCategory(int id) async {
+    invalidateCatalogCache();
     try {
-      final res = await http.delete(
+      final res = await _client.delete(
         Uri.parse('$baseUrl/categories/$id'),
         headers: await _headers(),
       );
@@ -900,19 +954,36 @@ class ApiService {
   // --- SubCategories APIs ---
 
   /// GET /subcategories (Optional: categoryId)
-  Future<List<dynamic>> getSubcategories({int? categoryId}) async {
+  Future<List<dynamic>> getSubcategories({int? categoryId, bool forceRefresh = false}) async {
+    if (!forceRefresh && categoryId != null && _cachedSubcategoriesByCat.containsKey(categoryId)) {
+      final cacheTime = _subcatCacheTimes[categoryId];
+      if (cacheTime != null && DateTime.now().difference(cacheTime).inSeconds < 60) {
+        return _cachedSubcategoriesByCat[categoryId]!;
+      }
+    }
     try {
       String endpoint = '$baseUrl/subcategories';
       if (categoryId != null) endpoint += '?categoryId=$categoryId';
-      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 5000));
+      final res = await _client.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 5000));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data is List) return data;
-        if (data is Map && data['data'] is List) return data['data'];
-        if (data is Map && data['subcategories'] is List) return data['subcategories'];
+        List<dynamic>? result;
+        if (data is List) result = data;
+        else if (data is Map && data['data'] is List) result = data['data'];
+        else if (data is Map && data['subcategories'] is List) result = data['subcategories'];
+        if (result != null) {
+          if (categoryId != null) {
+            _cachedSubcategoriesByCat[categoryId] = result;
+            _subcatCacheTimes[categoryId] = DateTime.now();
+          }
+          return result;
+        }
       }
     } catch (e) {
       debugPrint('getSubcategories error: $e');
+    }
+    if (categoryId != null && _cachedSubcategoriesByCat.containsKey(categoryId)) {
+      return _cachedSubcategoriesByCat[categoryId]!;
     }
     return [];
   }
@@ -1066,7 +1137,13 @@ class ApiService {
   // --- Products APIs ---
 
   /// GET /products (Query params: categoryId, subCategoryId)
-  Future<List<dynamic>> getProducts({int? categoryId, int? subCategoryId}) async {
+  Future<List<dynamic>> getProducts({int? categoryId, int? subCategoryId, bool forceRefresh = false}) async {
+    final bool isAll = categoryId == null && subCategoryId == null;
+    if (!forceRefresh && isAll && _cachedProducts != null && _productsCacheTime != null) {
+      if (DateTime.now().difference(_productsCacheTime!).inSeconds < 60) {
+        return _cachedProducts!;
+      }
+    }
     try {
       String endpoint = '$baseUrl/products';
       List<String> params = [];
@@ -1074,17 +1151,26 @@ class ApiService {
       if (subCategoryId != null) params.add('subCategoryId=$subCategoryId');
       if (params.isNotEmpty) endpoint += '?${params.join('&')}';
 
-      final res = await http.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(seconds: 10));
+      final res = await _client.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(seconds: 10));
       debugPrint('[API] getProducts response: status=${res.statusCode}');
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data is List) return data;
-        if (data is Map && data['data'] is List) return data['data'];
-        if (data is Map && data['products'] is List) return data['products'];
+        List<dynamic>? result;
+        if (data is List) result = data;
+        else if (data is Map && data['data'] is List) result = data['data'];
+        else if (data is Map && data['products'] is List) result = data['products'];
+        if (result != null) {
+          if (isAll) {
+            _cachedProducts = result;
+            _productsCacheTime = DateTime.now();
+          }
+          return result;
+        }
       }
     } catch (e) {
       debugPrint('[API] getProducts error: $e');
     }
+    if (isAll && _cachedProducts != null) return _cachedProducts!;
     return [];
   }
 
@@ -1104,6 +1190,7 @@ class ApiService {
 
   /// POST /products
   Future<bool> createProduct(Map<String, dynamic> data) async {
+    invalidateCatalogCache();
     final payload = {
       'category_id': data['category_id'],
       'subcategory_id': data['subcategory_id'],
@@ -1123,7 +1210,7 @@ class ApiService {
     };
 
     try {
-      final res = await http.post(
+      final res = await _client.post(
         Uri.parse('$baseUrl/products'),
         headers: await _headers(),
         body: jsonEncode(payload),
@@ -1141,6 +1228,7 @@ class ApiService {
 
   /// PUT /products/{id}
   Future<bool> updateProduct(int id, Map<String, dynamic> data) async {
+    invalidateCatalogCache();
     final payload = {
       'category_id': data['category_id'],
       'subcategory_id': data['subcategory_id'],
@@ -1160,7 +1248,7 @@ class ApiService {
     };
 
     try {
-      final res = await http.put(
+      final res = await _client.put(
         Uri.parse('$baseUrl/products/$id'),
         headers: await _headers(),
         body: jsonEncode(payload),
@@ -1178,8 +1266,9 @@ class ApiService {
 
   /// DELETE /products/{id}
   Future<bool> deleteProduct(int id) async {
+    invalidateCatalogCache();
     try {
-      final res = await http.delete(
+      final res = await _client.delete(
         Uri.parse('$baseUrl/products/$id'),
         headers: await _headers(),
       );

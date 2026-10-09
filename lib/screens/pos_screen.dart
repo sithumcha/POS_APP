@@ -65,13 +65,15 @@ class _PosScreenState extends State<PosScreen> {
   Future<void> _loadInitialData() async {
     setState(() => _isLoadingProducts = true);
     try {
-      final categoriesData = await _catalogRepo.getCachedOrRemoteCategories();
-      final productsData = await _catalogRepo.getCachedOrRemoteProducts();
+      final results = await Future.wait([
+        _catalogRepo.getCachedOrRemoteCategories(),
+        _catalogRepo.getCachedOrRemoteProducts(),
+      ]);
 
       if (!mounted) return;
       setState(() {
-        _categories = categoriesData;
-        _products = productsData;
+        _categories = results[0];
+        _products = results[1];
         _subcategories = []; // Clear mixed subcategories on initial All Items view
         _isLoadingProducts = false;
       });
@@ -90,15 +92,24 @@ class _PosScreenState extends State<PosScreen> {
 
     try {
       if (categoryId != null) {
-        final subcats = await _apiService.getSubcategories(categoryId: categoryId);
-        if (mounted) setState(() => _subcategories = subcats);
+        final results = await Future.wait([
+          _apiService.getSubcategories(categoryId: categoryId),
+          _apiService.getProducts(categoryId: categoryId),
+        ]);
+        if (!mounted) return;
+        setState(() {
+          _subcategories = results[0];
+          _products = results[1];
+          _isLoadingProducts = false;
+        });
+      } else {
+        final prods = await _apiService.getProducts();
+        if (!mounted) return;
+        setState(() {
+          _products = prods;
+          _isLoadingProducts = false;
+        });
       }
-      final prods = await _apiService.getProducts(categoryId: categoryId);
-      if (!mounted) return;
-      setState(() {
-        _products = prods;
-        _isLoadingProducts = false;
-      });
     } catch (_) {
       if (mounted) setState(() => _isLoadingProducts = false);
     }

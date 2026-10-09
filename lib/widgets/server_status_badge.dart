@@ -30,8 +30,8 @@ class _ServerStatusBadgeState extends State<ServerStatusBadge> {
     super.initState();
     // Auto purge any stale rejected unsynced staff records from local storage
     _apiService.purgeUnsyncedStaffMembers().then((_) => _checkHealth());
-    // Auto ping health check every 10 seconds
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkHealth());
+    // Auto ping health check every 30 seconds (reduces unnecessary network and CPU load)
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkHealth(silent: true));
   }
 
   @override
@@ -40,11 +40,13 @@ class _ServerStatusBadgeState extends State<ServerStatusBadge> {
     super.dispose();
   }
 
-  Future<void> _checkHealth() async {
+  Future<void> _checkHealth({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isChecking = true;
-    });
+    if (!silent) {
+      setState(() {
+        _isChecking = true;
+      });
+    }
 
     final status = await _apiService.checkServerHealth();
     final isOnline = status['isOnline'] as bool? ?? false;
@@ -56,11 +58,13 @@ class _ServerStatusBadgeState extends State<ServerStatusBadge> {
     }
 
     if (!mounted) return;
-    setState(() {
-      _isChecking = false;
-      _isOnline = isOnline;
-      _pendingCount = pendingCount;
-    });
+    if (_isOnline != isOnline || _pendingCount != pendingCount || _isChecking) {
+      setState(() {
+        _isChecking = false;
+        _isOnline = isOnline;
+        _pendingCount = pendingCount;
+      });
+    }
   }
 
   @override

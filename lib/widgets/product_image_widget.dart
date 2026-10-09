@@ -41,6 +41,8 @@ class ProductImageWidget extends StatelessWidget {
             bytes,
             width: width,
             height: height,
+            cacheWidth: width != null ? (width! * 2).toInt() : 300,
+            cacheHeight: height != null ? (height! * 2).toInt() : 300,
             fit: fit,
             errorBuilder: (_, __, ___) => _buildGradientFallbackCard(productName, br),
           ),
@@ -61,6 +63,8 @@ class ProductImageWidget extends StatelessWidget {
         targetUrl,
         width: width,
         height: height,
+        cacheWidth: width != null ? (width! * 2).toInt() : 300,
+        cacheHeight: height != null ? (height! * 2).toInt() : 300,
         fit: fit,
         errorBuilder: (_, __, ___) => _buildGradientFallbackCard(productName, br),
         loadingBuilder: (context, child, loadingProgress) {
@@ -71,9 +75,9 @@ class ProductImageWidget extends StatelessWidget {
             color: const Color(0xFFF1F5F9),
             child: const Center(
               child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black38),
               ),
             ),
           );
