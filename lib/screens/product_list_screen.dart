@@ -128,9 +128,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
       final stock = int.tryParse(item['stock']?.toString() ?? '10') ?? 10;
       bool matchesStock = true;
       if (_selectedStockFilter == 'Low Stock') {
-        matchesStock = stock < 5;
+        matchesStock = stock <= 5;
       } else if (_selectedStockFilter == 'In Stock') {
-        matchesStock = stock >= 5;
+        matchesStock = stock > 5;
       }
 
       return matchesQuery && matchesStock;
@@ -139,11 +139,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   // KPI Calculations
   int get _totalCount => _products.length;
-  int get _lowStockCount => _products.where((p) => (int.tryParse(p['stock']?.toString() ?? '10') ?? 10) < 5).length;
+  int get _lowStockCount => _products.where((p) => (int.tryParse(p['stock']?.toString() ?? '10') ?? 10) <= 5).length;
   double get _totalInventoryValue => _products.fold<double>(0.0, (sum, p) {
         final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
-        final price = double.tryParse((p['base_price'] ?? p['price'] ?? 0.0).toString()) ?? 0.0;
-        return sum + (stock * price);
+        final base = double.tryParse((p['base_price'] ?? p['price'] ?? 0.0).toString()) ?? 0.0;
+        final discount = p['discount_price'] != null ? double.tryParse(p['discount_price'].toString()) : null;
+        final effectivePrice = (discount != null && discount > 0 && (base == 0.0 || discount < base)) ? discount : base;
+        return sum + (stock * effectivePrice);
       });
 
   Widget _buildKpiCard({
@@ -155,7 +157,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     required String subtitle,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -169,29 +171,39 @@ class _ProductListScreenState extends State<ProductListScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   color: iconBg,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(7),
                 ),
-                child: Icon(icon, size: 16, color: iconColor),
+                child: Icon(icon, size: 14, color: iconColor),
               ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          valueWidget,
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: valueWidget,
+          ),
           const SizedBox(height: 2),
           Text(
             subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 11,
               color: AppColors.textMuted,
@@ -239,11 +251,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: SizedBox(
               height: 106,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  SizedBox(
-                    width: 150,
+                  Expanded(
+                    flex: 10,
                     child: _buildKpiCard(
                       icon: Icons.inventory_2_rounded,
                       iconColor: AppColors.accent,
@@ -252,17 +263,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
                       valueWidget: Text(
                         '$_totalCount',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      subtitle: 'Active in catalog',
+                      subtitle: 'In catalog',
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 150,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 10,
                     child: _buildKpiCard(
                       icon: Icons.warning_amber_rounded,
                       iconColor: _lowStockCount > 0 ? const Color(0xFFEF4444) : AppColors.emerald,
@@ -271,17 +282,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
                       valueWidget: Text(
                         '$_lowStockCount',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: _lowStockCount > 0 ? const Color(0xFFEF4444) : AppColors.textPrimary,
                         ),
                       ),
-                      subtitle: _lowStockCount > 0 ? 'Needs reordering' : 'Stock healthy',
+                      subtitle: _lowStockCount > 0 ? 'Needs reorder' : 'Healthy',
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 180,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 14,
                     child: _buildKpiCard(
                       icon: Icons.account_balance_wallet_rounded,
                       iconColor: AppColors.emerald,
@@ -289,10 +300,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
                       title: 'Catalog Value',
                       valueWidget: CurrencyText(
                         amount: _totalInventoryValue,
-                        fontSize: 16,
+                        fontSize: 15,
                         color: AppColors.textPrimary,
                       ),
-                      subtitle: 'Total retail worth',
+                      subtitle: 'Retail worth',
                     ),
                   ),
                 ],
@@ -456,7 +467,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                               ? double.tryParse(item['discount_price'].toString())
                               : null;
                           final int stock = int.tryParse(item['stock']?.toString() ?? '10') ?? 10;
-                          final bool isLowStock = stock < 5;
+                          final bool isLowStock = stock <= 5;
 
                           return Container(
                             padding: const EdgeInsets.all(12),

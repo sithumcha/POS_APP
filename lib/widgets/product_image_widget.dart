@@ -24,6 +24,13 @@ class ProductImageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final br = borderRadius ?? BorderRadius.circular(12);
 
+    final int? safeCacheWidth = (width != null && width!.isFinite && width! > 0)
+        ? (width! * 2).toInt().clamp(100, 1200)
+        : 400;
+    final int? safeCacheHeight = (height != null && height!.isFinite && height! > 0)
+        ? (height! * 2).toInt().clamp(100, 1200)
+        : 400;
+
     String? targetUrl = imageUrl;
 
     if (targetUrl == null || targetUrl.trim().isEmpty) {
@@ -41,8 +48,8 @@ class ProductImageWidget extends StatelessWidget {
             bytes,
             width: width,
             height: height,
-            cacheWidth: width != null ? (width! * 2).toInt() : 300,
-            cacheHeight: height != null ? (height! * 2).toInt() : 300,
+            cacheWidth: safeCacheWidth,
+            cacheHeight: safeCacheHeight,
             fit: fit,
             errorBuilder: (_, __, ___) => _buildGradientFallbackCard(productName, br),
           ),
@@ -63,8 +70,8 @@ class ProductImageWidget extends StatelessWidget {
         targetUrl,
         width: width,
         height: height,
-        cacheWidth: width != null ? (width! * 2).toInt() : 300,
-        cacheHeight: height != null ? (height! * 2).toInt() : 300,
+        cacheWidth: safeCacheWidth,
+        cacheHeight: safeCacheHeight,
         fit: fit,
         errorBuilder: (_, __, ___) => _buildGradientFallbackCard(productName, br),
         loadingBuilder: (context, child, loadingProgress) {
