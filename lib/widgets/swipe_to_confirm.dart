@@ -57,20 +57,24 @@ class _SwipeToConfirmButtonState extends State<SwipeToConfirmButton> {
                 // Center text label
                 Center(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: widget.height),
+                    padding: const EdgeInsets.symmetric(horizontal: 44),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          widget.label,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: widget.textColor.withOpacity(0.92),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
+                        Flexible(
+                          child: Text(
+                            widget.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: widget.textColor.withOpacity(0.92),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                         Icon(
                           Icons.chevron_right_rounded,
                           color: widget.textColor.withOpacity(0.6),

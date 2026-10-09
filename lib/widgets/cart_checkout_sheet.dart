@@ -24,6 +24,7 @@ class CartCheckoutSheet extends StatefulWidget {
 
 class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   final ApiService _apiService = ApiService();
+  final TextEditingController _cashTenderedController = TextEditingController();
 
   // Selected Payment Method: 0 = Cash, 1 = Card, 2 = QR Code
   int _selectedPaymentMethod = 0;
@@ -44,6 +45,12 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     super.initState();
     _localCart = List<Map<String, dynamic>>.from(widget.cartItems.map((i) => Map<String, dynamic>.from(i)));
     _loadCurrentUserInfo();
+  }
+
+  @override
+  void dispose() {
+    _cashTenderedController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentUserInfo() async {
@@ -107,22 +114,6 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
       _localCart.removeAt(index);
     });
     widget.onUpdateCart(_localCart);
-  }
-
-  void _handleNumPadInput(String val) {
-    setState(() {
-      if (val == 'C') {
-        _cashTenderedInput = '';
-      } else if (val == '⌫') {
-        if (_cashTenderedInput.isNotEmpty) {
-          _cashTenderedInput = _cashTenderedInput.substring(0, _cashTenderedInput.length - 1);
-        }
-      } else {
-        if (_cashTenderedInput.length < 9) {
-          _cashTenderedInput += val;
-        }
-      }
-    });
   }
 
   Future<void> _handleCompleteOrder() async {
@@ -195,33 +186,38 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Cart Review & Checkout',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_localCart.length} items',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Flexible(
+                        child: Text(
+                          'Cart Review & Checkout',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_localCart.length} items',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -400,36 +396,42 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Discount', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                                  Row(
-                                    children: [0.0, 5.0, 10.0, 15.0].map((pct) {
-                                      final isSelected = _discountPercentage == pct;
-                                      return Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: InkWell(
-                                          onTap: () {
-                                            setState(() {
-                                              _discountPercentage = pct;
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: isSelected ? Colors.black : Colors.white,
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: isSelected ? Colors.black : const Color(0xFFCBD5E1)),
-                                            ),
-                                            child: Text(
-                                              '${pct.toInt()}%',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: isSelected ? Colors.white : Colors.black,
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [0.0, 5.0, 10.0, 15.0].map((pct) {
+                                          final isSelected = _discountPercentage == pct;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(left: 4),
+                                            child: InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _discountPercentage = pct;
+                                                });
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isSelected ? Colors.black : Colors.white,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: isSelected ? Colors.black : const Color(0xFFCBD5E1)),
+                                                ),
+                                                child: Text(
+                                                  '${pct.toInt()}%',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isSelected ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -500,31 +502,64 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                 ),
                                 const SizedBox(height: 10),
 
-                                // Cash Tendered Display Field
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                // Cash Tendered Native Input Field
+                                TextFormField(
+                                  controller: _cashTenderedController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.black,
                                   ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('Cash Tendered:', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                                      Text(
-                                        _cashTenderedInput.isEmpty ? 'LKR 0.00' : 'LKR $_cashTenderedInput.00',
-                                        style: const TextStyle(
-                                          fontSize: 18,
+                                  decoration: InputDecoration(
+                                    labelText: 'Cash Tendered',
+                                    hintText: '0.00',
+                                    prefixIcon: const Padding(
+                                      padding: EdgeInsets.only(left: 16, right: 8),
+                                      child: Text(
+                                        'LKR',
+                                        style: TextStyle(
+                                          fontSize: 15,
                                           fontWeight: FontWeight.w900,
-                                          color: Colors.black,
+                                          color: AppColors.primary,
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                    prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                                    suffixIcon: _cashTenderedController.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.cancel_rounded, color: AppColors.textMuted),
+                                            onPressed: () {
+                                              setState(() {
+                                                _cashTenderedController.clear();
+                                                _cashTenderedInput = '';
+                                              });
+                                            },
+                                          )
+                                        : null,
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                                    ),
                                   ),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _cashTenderedInput = val.trim();
+                                    });
+                                  },
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 12),
 
                                 // Quick Amount Presets
                                 Wrap(
@@ -538,52 +573,6 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                     _buildPresetChip('+ 5,000', '+5000'),
                                     _buildPresetChip('Clear', 'CLEAR', isDanger: true),
                                   ],
-                                ),
-                                const SizedBox(height: 14),
-
-                                // Numeric Keypad Modal
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          _buildNumKey('1'),
-                                          _buildNumKey('2'),
-                                          _buildNumKey('3'),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          _buildNumKey('4'),
-                                          _buildNumKey('5'),
-                                          _buildNumKey('6'),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          _buildNumKey('7'),
-                                          _buildNumKey('8'),
-                                          _buildNumKey('9'),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          _buildNumKey('C', isAction: true),
-                                          _buildNumKey('0'),
-                                          _buildNumKey('⌫', isAction: true),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
                                 ),
                                 const SizedBox(height: 14),
 
@@ -610,32 +599,41 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                     ],
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            _changeDue >= 0 ? Icons.check_circle_rounded : Icons.pending_rounded,
-                                            size: 22,
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _changeDue >= 0 ? Icons.check_circle_rounded : Icons.pending_rounded,
+                                              size: 20,
+                                              color: _changeDue >= 0 ? const Color(0xFF047857) : const Color(0xFFC2410C),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                _changeDue >= 0 ? 'Change Due:' : 'Cash Needed:',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _changeDue >= 0 ? const Color(0xFF065F46) : const Color(0xFF9A3412),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'LKR ${_changeDue.abs().toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
                                             color: _changeDue >= 0 ? const Color(0xFF047857) : const Color(0xFFC2410C),
                                           ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            _changeDue >= 0 ? 'Change Balance Due:' : 'Remaining Cash Needed:',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: _changeDue >= 0 ? const Color(0xFF065F46) : const Color(0xFF9A3412),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Text(
-                                        'LKR ${_changeDue.abs().toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w900,
-                                          color: _changeDue >= 0 ? const Color(0xFF047857) : const Color(0xFFC2410C),
                                         ),
                                       ),
                                     ],
@@ -780,13 +778,17 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
       onTap: () {
         setState(() {
           if (value == 'CLEAR') {
+            _cashTenderedController.clear();
             _cashTenderedInput = '';
           } else if (value.startsWith('+')) {
-            final current = int.tryParse(_cashTenderedInput) ?? 0;
-            final add = int.tryParse(value.substring(1)) ?? 0;
-            _cashTenderedInput = '${current + add}';
+            final current = double.tryParse(_cashTenderedInput) ?? 0.0;
+            final add = double.tryParse(value.substring(1)) ?? 0.0;
+            final total = (current + add).toInt();
+            _cashTenderedInput = '$total';
+            _cashTenderedController.text = '$total';
           } else {
             _cashTenderedInput = value;
+            _cashTenderedController.text = value;
           }
         });
       },
@@ -819,42 +821,6 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                 : isDanger
                     ? AppColors.error
                     : AppColors.textPrimary,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNumKey(String text, {bool isAction = false}) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: InkWell(
-          onTap: () => _handleNumPadInput(text),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: isAction ? const Color(0xFFE2E8F0) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isAction ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-                color: isAction ? (text == 'C' ? const Color(0xFFDC2626) : const Color(0xFF0F172A)) : Colors.black,
-              ),
-            ),
           ),
         ),
       ),
