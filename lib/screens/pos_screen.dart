@@ -10,6 +10,7 @@ import '../widgets/product_image_widget.dart';
 import '../widgets/low_stock_restock_sheet.dart';
 import '../widgets/shimmer_loading.dart';
 import '../widgets/currency_text.dart';
+import '../widgets/ui_animation_helper.dart';
 import '../database/app_database.dart';
 import '../repositories/catalog_sync_repository.dart';
 import '../services/notification_service.dart';
@@ -17,6 +18,8 @@ import '../services/permission_service.dart';
 import 'product_list_screen.dart';
 import 'category_setup_screen.dart';
 import 'user_profile_screen.dart';
+import 'sales_history_screen.dart';
+import 'store_setup_screen.dart';
 import 'login_screen.dart';
 
 class PosScreen extends StatefulWidget {
@@ -62,6 +65,9 @@ class _PosScreenState extends State<PosScreen> {
     super.dispose();
   }
 
+  /// 1. CATALOG INITIALIZATION:
+  /// Loads initial categories and products using CatalogSyncRepository.
+  /// Prioritizes Drift SQLite offline cache for lightning speed, then syncs with remote backend.
   Future<void> _loadInitialData() async {
     setState(() => _isLoadingProducts = true);
     try {
@@ -74,7 +80,7 @@ class _PosScreenState extends State<PosScreen> {
       setState(() {
         _categories = results[0];
         _products = results[1];
-        _subcategories = []; // Clear mixed subcategories on initial All Items view
+        _subcategories = []; // Clear subcategories on initial "All Items" catalog view
         _isLoadingProducts = false;
       });
     } catch (_) {
@@ -82,16 +88,20 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
+  /// 2. CATEGORY FILTER LOGIC:
+  /// Filters catalog by category. If null is passed, displays all items.
+  /// Automatically fetches cascading subcategories for the selected category.
   Future<void> _onCategorySelected(int? categoryId) async {
     setState(() {
       _selectedCategoryId = categoryId;
-      _selectedSubcategoryId = null;
+      _selectedSubcategoryId = null; // Reset previously selected subcategory
       _subcategories = [];
       _isLoadingProducts = true;
     });
 
     try {
       if (categoryId != null) {
+        // Concurrently fetch subcategories and products belonging to the selected category
         final results = await Future.wait([
           _apiService.getSubcategories(categoryId: categoryId),
           _apiService.getProducts(categoryId: categoryId),
@@ -103,6 +113,7 @@ class _PosScreenState extends State<PosScreen> {
           _isLoadingProducts = false;
         });
       } else {
+        // If "All Categories" is selected, fetch all products
         final prods = await _apiService.getProducts();
         if (!mounted) return;
         setState(() {
@@ -115,6 +126,8 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
+  /// 3. SUBCATEGORY FILTER LOGIC:
+  /// Refines product catalog to only show items belonging to a specific subcategory.
   Future<void> _onSubcategorySelected(int? subcategoryId) async {
     setState(() {
       _selectedSubcategoryId = subcategoryId;
@@ -136,18 +149,24 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
+  /// 4. PRICE CLEANING & SANITIZATION:
+  /// Safely converts dynamic price values (strings, ints, or doubles) to double format.
   double _getCleanPrice(dynamic val) {
     if (val == null) return 0.0;
     if (val is num) return val.toDouble();
     return double.tryParse(val.toString()) ?? 0.0;
   }
 
+  /// 5. ADD TO CART LOGIC:
+  /// Adds a selected product to the cart. If the product already exists in the cart,
+  /// increments its quantity and recalculates its total price.
   void _addToCart(dynamic rawProduct) {
     if (rawProduct == null) return;
-    HapticFeedback.lightImpact();
+    HapticFeedback.lightImpact(); // Subtle haptic feedback for mobile/tablet POS experience
     final Map<String, dynamic> product = Map<String, dynamic>.from(rawProduct as Map);
     final String name = (product['name'] ?? 'Item').toString();
 
+    // Calculate effective price: Use discount price if valid & lower than regular price
     final double discount = _getCleanPrice(product['discount_price']);
     final double regular = _getCleanPrice(product['price'] ?? product['base_price']);
     final double finalPrice = (discount > 0 && discount < regular) ? discount : (regular > 0 ? regular : 1.0);
@@ -155,11 +174,13 @@ class _PosScreenState extends State<PosScreen> {
     setState(() {
       final index = _cartItems.indexWhere((item) => item['name'] == name);
       if (index >= 0) {
+        // Item already in cart: increment quantity
         int currentQty = int.tryParse(_cartItems[index]['quantity']?.toString() ?? '1') ?? 1;
         int newQty = currentQty + 1;
         _cartItems[index]['quantity'] = newQty;
         _cartItems[index]['total_price'] = newQty * finalPrice;
       } else {
+        // Item not in cart: insert new line item
         _cartItems.add({
           'product_id': product['id'],
           'name': name,
@@ -173,6 +194,8 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  /// 6. TOTAL ITEMS IN CART:
+  /// Sums the quantities of all active line items in the cart.
   int get _cartCount {
     int count = 0;
     for (var i in _cartItems) {
@@ -181,6 +204,8 @@ class _PosScreenState extends State<PosScreen> {
     return count;
   }
 
+  /// 7. TOTAL BILLING VALUE:
+  /// Sums total prices across all active cart items.
   double get _cartTotal {
     double sum = 0.0;
     for (var i in _cartItems) {
@@ -189,6 +214,8 @@ class _PosScreenState extends State<PosScreen> {
     return sum;
   }
 
+  /// 8. PRODUCT DETAIL BOTTOM SHEET:
+  /// Opens product details for custom variant options or quantity adjustments.
   void _openProductDetailSheet(dynamic rawProduct) {
     final Map<String, dynamic> product = Map<String, dynamic>.from(rawProduct as Map);
     showModalBottomSheet(
@@ -218,6 +245,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// 9. CHECKOUT SHEET TRIGGER:
+  /// Opens checkout sheet for customer assignment, payment method selection (Cash/Card),
+  /// offline receipt queuing, and order finalization.
   void _openCheckoutSheet() {
     showModalBottomSheet(
       context: context,
@@ -232,6 +262,7 @@ class _PosScreenState extends State<PosScreen> {
           });
         },
         onOrderCompleted: () {
+          // Clear cart upon successful payment and order creation
           setState(() {
             _cartItems.clear();
           });
@@ -247,6 +278,8 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// 10. BARCODE SCANNER MODAL:
+  /// Opens camera/laser scanner modal to quickly look up items and add directly to cart.
   void _openBarcodeScannerModal() {
     showModalBottomSheet(
       context: context,
@@ -318,10 +351,9 @@ class _PosScreenState extends State<PosScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      Navigator.pushAndRemoveUntil(
+      AppNavigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
+        const LoginScreen(),
       );
     }
   }
@@ -443,13 +475,11 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildIconBtn(Icons.person_outline_rounded, () {
-                    Navigator.push(
+                    AppNavigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => UserProfileScreen(
-                          userEmail: widget.userEmail,
-                          storeName: widget.storeName,
-                        ),
+                      UserProfileScreen(
+                        userEmail: widget.userEmail,
+                        storeName: widget.storeName,
                       ),
                     );
                   }),
@@ -549,116 +579,52 @@ class _PosScreenState extends State<PosScreen> {
                                 ? (((regular - discount) / regular) * 100).round()
                                 : 0;
 
-                            return Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                                boxShadow: AppColors.softShadow,
-                              ),
+                            return HoverScaleCard(
+                              borderRadius: BorderRadius.circular(20),
+                              padding: EdgeInsets.zero,
+                              scaleFactor: 1.022,
+                              onTap: () => _openProductDetailSheet(item),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Product Image & Badges
                                   Expanded(
-                                    child: GestureDetector(
-                                      onTap: () => _openProductDetailSheet(item),
-                                      child: Stack(
-                                        children: [
-                                          ProductImageWidget(
-                                            imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
-                                            productName: item['name'],
-                                            width: double.infinity,
-                                            height: double.infinity,
-                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                          ),
-                                          // Featured Badge Overlay (Top Left)
-                                          if (isFeatured)
-                                            Positioned(
-                                              top: 8,
-                                              left: 8,
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  gradient: const LinearGradient(
-                                                    colors: [Color(0xFFFF5252), Color(0xFFFF7A00)],
-                                                  ),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.orange.withOpacity(0.4),
-                                                      blurRadius: 6,
-                                                      offset: const Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: const Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Text('🔥 ', style: TextStyle(fontSize: 10)),
-                                                    Text(
-                                                      'Featured',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 10,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-
-                                          // Discount Badge Overlay (Top Right)
-                                          if (hasDiscount && discountPct > 0)
-                                            Positioned(
-                                              top: 8,
-                                              right: 8,
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFDC2626),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.red.withOpacity(0.3),
-                                                      blurRadius: 6,
-                                                      offset: const Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Text(
-                                                  '-$discountPct%',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w900,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-
-                                          // Stock Indicator Overlay (Bottom Left)
+                                    child: Stack(
+                                      children: [
+                                        ProductImageWidget(
+                                          imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
+                                          productName: item['name'],
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                        ),
+                                        // Featured Badge Overlay (Top Left)
+                                        if (isFeatured)
                                           Positioned(
-                                            bottom: 8,
+                                            top: 8,
                                             left: 8,
                                             child: Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: stock <= 0
-                                                    ? const Color(0xFFEF4444).withOpacity(0.9)
-                                                    : stock <= 5
-                                                        ? const Color(0xFFF59E0B).withOpacity(0.9)
-                                                        : Colors.black.withOpacity(0.75),
+                                                gradient: const LinearGradient(
+                                                  colors: [Color(0xFFFF5252), Color(0xFFFF7A00)],
+                                                ),
                                                 borderRadius: BorderRadius.circular(12),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.orange.withOpacity(0.4),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
                                               ),
-                                              child: Row(
+                                              child: const Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Text('📦 ', style: TextStyle(fontSize: 9)),
+                                                  Text('🔥 ', style: TextStyle(fontSize: 10)),
                                                   Text(
-                                                    stock <= 0 ? 'Out of Stock' : 'Stock: $stock',
-                                                    style: const TextStyle(
+                                                    'Featured',
+                                                    style: TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 10,
                                                       fontWeight: FontWeight.bold,
@@ -668,8 +634,67 @@ class _PosScreenState extends State<PosScreen> {
                                               ),
                                             ),
                                           ),
-                                        ],
-                                      ),
+
+                                        // Discount Badge Overlay (Top Right)
+                                        if (hasDiscount && discountPct > 0)
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFDC2626),
+                                                borderRadius: BorderRadius.circular(12),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.red.withOpacity(0.3),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Text(
+                                                '-$discountPct%',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                        // Stock Indicator Overlay (Bottom Left)
+                                        Positioned(
+                                          bottom: 8,
+                                          left: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: stock <= 0
+                                                  ? const Color(0xFFEF4444).withOpacity(0.9)
+                                                  : stock <= 5
+                                                      ? const Color(0xFFF59E0B).withOpacity(0.9)
+                                                      : Colors.black.withOpacity(0.75),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Text('📦 ', style: TextStyle(fontSize: 9)),
+                                                Text(
+                                                  stock <= 0 ? 'Out of Stock' : 'Stock: $stock',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
 
@@ -679,24 +704,21 @@ class _PosScreenState extends State<PosScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        GestureDetector(
-                                          onTap: () => _openProductDetailSheet(item),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                item['name'] ?? '',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'SKU: ${item['sku'] ?? 'N/A'}',
-                                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                                              ),
-                                            ],
-                                          ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item['name'] ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'SKU: ${item['sku'] ?? 'N/A'}',
+                                              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 8),
                                         Row(
@@ -720,17 +742,24 @@ class _PosScreenState extends State<PosScreen> {
                                                 ),
                                               ],
                                             ),
-                                            Material(
-                                              color: Colors.black,
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: InkWell(
-                                                onTap: () => _addToCart(item),
-                                                borderRadius: BorderRadius.circular(10),
-                                                child: const SizedBox(
-                                                  width: 34,
-                                                  height: 34,
-                                                  child: Icon(Icons.add_rounded, color: Colors.white, size: 20),
+                                            AnimatedTapButton(
+                                              scaleDown: 0.88,
+                                              onTap: () => _addToCart(item),
+                                              child: Container(
+                                                width: 36,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black,
+                                                  borderRadius: BorderRadius.circular(11),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.18),
+                                                      blurRadius: 6,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
                                                 ),
+                                                child: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
                                               ),
                                             ),
                                           ],
@@ -751,35 +780,32 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildIconBtn(IconData icon, VoidCallback onTap) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.85),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.9),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+    return AnimatedTapButton(
+      scaleDown: 0.90,
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.9),
+                width: 1.2,
               ),
-              child: Icon(icon, color: const Color(0xFF1E293B), size: 21),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
+            child: Icon(icon, color: const Color(0xFF1E293B), size: 21),
           ),
         ),
       ),
@@ -787,13 +813,29 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildChip(String label, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
+    return AnimatedTapButton(
+      scaleDown: 0.94,
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.black : const Color(0xFFF3F4F6),
+          color: isSelected ? Colors.black : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isSelected ? Colors.black : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -808,21 +850,36 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildSubChip(String label, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
+    return AnimatedTapButton(
+      scaleDown: 0.94,
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE5E7EB) : const Color(0xFFFAFAFA),
+          color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? Colors.black : const Color(0xFFE5E7EB)),
+          border: Border.all(
+            color: isSelected ? Colors.black : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: Colors.black,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
           ),
         ),
       ),
@@ -911,31 +968,36 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                   ],
                 ),
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  elevation: 2,
-                  shadowColor: Colors.black.withOpacity(0.2),
-                  child: InkWell(
-                    onTap: _openCheckoutSheet,
-                    borderRadius: BorderRadius.circular(16),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Checkout',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
+                AnimatedTapButton(
+                  scaleDown: 0.94,
+                  onTap: _openCheckoutSheet,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Checkout',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
                           ),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.black),
-                        ],
-                      ),
+                        ),
+                        SizedBox(width: 6),
+                        Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.black),
+                      ],
                     ),
                   ),
                 ),
@@ -947,6 +1009,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// CREATIVE ANIMATED BOTTOM NAVIGATION DOCK:
+  /// Features glassmorphic backdrop, spring bounce taps, active glowing pill,
+  /// elevated primary scanner action, direct Sales History shortcut, and Quick Menu Hub.
   Widget _buildBottomDock(int lowStockCount) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -955,14 +1020,14 @@ class _PosScreenState extends State<PosScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.white.withOpacity(0.85),
-                  Colors.white.withOpacity(0.65),
+                  Colors.white.withOpacity(0.92),
+                  Colors.white.withOpacity(0.78),
                 ],
               ),
               borderRadius: BorderRadius.circular(30),
@@ -987,42 +1052,44 @@ class _PosScreenState extends State<PosScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                // 1. POS Terminal Tab (Active)
                 _buildBottomDockItem(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Products',
+                  icon: Icons.point_of_sale_rounded,
+                  label: 'POS',
+                  isActive: true,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProductListScreen()),
-                    ).then((_) => _loadInitialData());
+                    HapticFeedback.selectionClick();
                   },
                 ),
+                // 2. Sales History Shortcut
                 _buildBottomDockItem(
-                  icon: Icons.category_outlined,
-                  label: 'Categories',
+                  icon: Icons.receipt_long_rounded,
+                  label: 'Sales',
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CategorySetupScreen()),
-                    ).then((_) => _loadInitialData());
+                    AppNavigator.push(context, const SalesHistoryScreen());
                   },
                 ),
+                // 3. Elevated Floating Barcode Scanner
                 _buildBottomDockItem(
                   icon: Icons.qr_code_scanner_rounded,
                   label: 'Scan',
                   isPrimary: true,
                   onTap: _openBarcodeScannerModal,
                 ),
+                // 4. Products Inventory
                 _buildBottomDockItem(
-                  icon: Icons.warning_amber_rounded,
-                  label: 'Stock Alert',
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Products',
                   badgeCount: lowStockCount,
-                  onTap: _openLowStockRestockSheet,
+                  onTap: () {
+                    AppNavigator.push(context, const ProductListScreen()).then((_) => _loadInitialData());
+                  },
                 ),
+                // 5. Quick Navigation Menu Hub
                 _buildBottomDockItem(
-                  icon: Icons.logout_rounded,
-                  label: 'Logout',
-                  onTap: _handleLogout,
+                  icon: Icons.grid_view_rounded,
+                  label: 'Menu',
+                  onTap: _openQuickNavigationSheet,
                 ),
               ],
             ),
@@ -1032,142 +1099,427 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  /// CREATIVE DOCK ITEM WITH SPRING TAP AND ACTIVE GLOW:
   Widget _buildBottomDockItem({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
     int badgeCount = 0,
     bool isPrimary = false,
+    bool isActive = false,
   }) {
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (isPrimary)
-                      Container(
-                        width: 52,
-                        height: 42,
+      child: AnimatedTapButton(
+        scaleDown: 0.88,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (isPrimary)
+                    Container(
+                      width: 52,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.25),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withOpacity(0.4),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 4,
+                            right: 4,
+                            child: Container(
+                              height: 12,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white.withOpacity(0.25),
+                                    Colors.white.withOpacity(0.0),
+                                  ],
+                                ),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                            ),
+                          ),
+                          Icon(icon, color: Colors.white, size: 21),
+                        ],
+                      ),
+                    )
+                  else
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 44,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isActive ? const Color(0xFFECFDF5) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        border: isActive
+                            ? Border.all(color: const Color(0xFFA7F3D0), width: 1.2)
+                            : null,
+                      ),
+                      child: Icon(
+                        icon,
+                        color: isActive
+                            ? const Color(0xFF059669)
+                            : const Color(0xFF475569),
+                        size: 22,
+                      ),
+                    ),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: isPrimary ? -2 : -4,
+                      top: isPrimary ? -2 : -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF1E293B),
-                              Color(0xFF0F172A),
-                            ],
+                            colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
                           ),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.22),
-                            width: 1.2,
-                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF0F172A).withOpacity(0.35),
-                              blurRadius: 12,
-                              offset: const Offset(0, 5),
+                              color: Colors.red.withOpacity(0.4),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned(
-                              top: 0,
-                              left: 4,
-                              right: 4,
-                              child: Container(
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.white.withOpacity(0.22),
-                                      Colors.white.withOpacity(0.0),
-                                    ],
-                                  ),
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                ),
-                              ),
-                            ),
-                            Icon(icon, color: Colors.white, size: 21),
-                          ],
-                        ),
-                      )
-                    else
-                      Container(
-                        width: 42,
-                        height: 34,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          icon,
-                          color: const Color(0xFF334155),
-                          size: 23,
-                        ),
-                      ),
-                    if (badgeCount > 0)
-                      Positioned(
-                        right: isPrimary ? -2 : -4,
-                        top: isPrimary ? -2 : -4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white, width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withOpacity(0.4),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            '$badgeCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              height: 1,
-                            ),
+                        child: Text(
+                          '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
                           ),
                         ),
                       ),
-                  ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: isPrimary || isActive ? FontWeight.w800 : FontWeight.w600,
+                  color: isPrimary
+                      ? const Color(0xFF0F172A)
+                      : (isActive ? const Color(0xFF059669) : const Color(0xFF64748B)),
+                  letterSpacing: -0.15,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: isPrimary ? FontWeight.w800 : FontWeight.w600,
-                    color: isPrimary ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                    letterSpacing: -0.15,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// CREATIVE QUICK NAVIGATION HUB MODAL:
+  /// Glassmorphic bottom sheet providing fast, animated access to all app features.
+  void _openQuickNavigationSheet() {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.96),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(0.12),
+                    blurRadius: 32,
+                    offset: const Offset(0, -8),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Drag indicator handle
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+
+                  // Store Header banner with live server status
+                  Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.storeName.isNotEmpty ? widget.storeName : 'QuickeApp POS',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.userEmail,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Quick navigation grid
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.95,
+                    children: [
+                      _buildQuickNavTile(
+                        icon: Icons.category_rounded,
+                        color: const Color(0xFF8B5CF6),
+                        label: 'Categories',
+                        onTap: () {
+                          Navigator.pop(context);
+                          AppNavigator.push(context, const CategorySetupScreen())
+                              .then((_) => _loadInitialData());
+                        },
+                      ),
+                      _buildQuickNavTile(
+                        icon: Icons.receipt_long_rounded,
+                        color: const Color(0xFF3B82F6),
+                        label: 'Sales History',
+                        onTap: () {
+                          Navigator.pop(context);
+                          AppNavigator.push(context, const SalesHistoryScreen());
+                        },
+                      ),
+                      _buildQuickNavTile(
+                        icon: Icons.inventory_2_rounded,
+                        color: const Color(0xFF10B981),
+                        label: 'Inventory',
+                        onTap: () {
+                          Navigator.pop(context);
+                          AppNavigator.push(context, const ProductListScreen())
+                              .then((_) => _loadInitialData());
+                        },
+                      ),
+                      _buildQuickNavTile(
+                        icon: Icons.store_mall_directory_rounded,
+                        color: const Color(0xFFF59E0B),
+                        label: 'Store Setup',
+                        onTap: () {
+                          Navigator.pop(context);
+                          AppNavigator.push(
+                            context,
+                            StoreSetupScreen(
+                              userEmail: widget.userEmail,
+                              initialStoreName: widget.storeName,
+                              isEditing: true,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildQuickNavTile(
+                        icon: Icons.person_rounded,
+                        color: const Color(0xFF06B6D4),
+                        label: 'Staff & Profile',
+                        onTap: () {
+                          Navigator.pop(context);
+                          AppNavigator.push(
+                            context,
+                            UserProfileScreen(
+                              userEmail: widget.userEmail,
+                              storeName: widget.storeName,
+                            ),
+                          );
+                        },
+                      ),
+                      _buildQuickNavTile(
+                        icon: Icons.warning_amber_rounded,
+                        color: const Color(0xFFEF4444),
+                        label: 'Stock Alerts',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _openLowStockRestockSheet();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Logout action button
+                  AnimatedTapButton(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _handleLogout();
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFCA5A5).withOpacity(0.5)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Sign Out from Terminal',
+                            style: TextStyle(
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  /// Helper rendering individual interactive tile inside the Quick Navigation Sheet:
+  Widget _buildQuickNavTile({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return AnimatedTapButton(
+      scaleDown: 0.92,
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1E293B),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );

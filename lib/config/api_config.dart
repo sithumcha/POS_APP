@@ -13,4 +13,6 @@ class ApiConfig {
   static String productsEndpoint = '/products';
   static String uploadImageEndpoint = '/upload/image';
   static String uploadImagesEndpoint = '/upload/images';
+  static String ordersEndpoint = '/orders';
+  static String ordersStatsEndpoint = '/orders/stats';
 }

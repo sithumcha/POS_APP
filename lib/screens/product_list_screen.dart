@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../widgets/currency_text.dart';
 import '../widgets/product_image_widget.dart';
 import '../widgets/shimmer_loading.dart';
+import '../widgets/ui_animation_helper.dart';
 import 'product_form_screen.dart';
 
 class ProductListScreen extends StatefulWidget {
@@ -36,6 +37,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
     super.dispose();
   }
 
+  /// 1. PRODUCT FETCHING LOGIC:
+  /// Retrieves product inventory from the backend API.
+  /// Supports forceRefresh parameter to bypass in-memory caching and fetch fresh stock counts.
   Future<void> _loadProducts({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
@@ -56,6 +60,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  /// 2. PRODUCT DELETION LOGIC:
+  /// Displays a safety confirmation dialog before sending the delete request to the backend.
+  /// Removes the deleted item locally from the list on success for instant UI feedback.
   Future<void> _deleteProduct(int productId, String productName) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -105,12 +112,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  /// 3. CREATE / EDIT PRODUCT NAVIGATION:
+  /// Navigates to ProductFormScreen. If a product was saved or modified,
+  /// re-fetches the latest catalog upon returning to this screen.
   Future<void> _openProductFormScreen({Map<String, dynamic>? initialProduct}) async {
-    final result = await Navigator.push(
+    final result = await AppNavigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProductFormScreen(initialProduct: initialProduct),
-      ),
+      ProductFormScreen(initialProduct: initialProduct),
     );
     if (result == true) {
       _loadProducts();
@@ -469,116 +477,123 @@ class _ProductListScreenState extends State<ProductListScreen> {
                           final int stock = int.tryParse(item['stock']?.toString() ?? '10') ?? 10;
                           final bool isLowStock = stock <= 5;
 
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
+                          return FadeSlideEntrance(
+                            delay: Duration(milliseconds: 30 * (index % 10)),
+                            child: HoverScaleCard(
+                              padding: const EdgeInsets.all(12),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: AppColors.softShadow,
-                            ),
-                            child: Row(
-                              children: [
-                                ProductImageWidget(
-                                  imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
-                                  productName: name,
-                                  width: 60,
-                                  height: 60,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                const SizedBox(width: 14),
+                              scaleFactor: 1.018,
+                              child: Row(
+                                children: [
+                                  ProductImageWidget(
+                                    imageUrl: item['main_image'] ?? (item['images'] is List && (item['images'] as List).isNotEmpty ? item['images'][0] : null),
+                                    productName: name,
+                                    width: 60,
+                                    height: 60,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  const SizedBox(width: 14),
 
-                                // Product Info Stack
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'SKU: $sku',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textMuted,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        crossAxisAlignment: WrapCrossAlignment.center,
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          // Price Display with Tabular Figures CurrencyText (Item 2)
-                                          if (discountPrice != null) ...[
-                                            CurrencyText(
-                                              amount: discountPrice,
-                                              fontSize: 14,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                            CurrencyText(
-                                              amount: basePrice,
-                                              fontSize: 11,
-                                              color: AppColors.textMuted,
-                                              decoration: TextDecoration.lineThrough,
-                                            ),
-                                          ] else
-                                            CurrencyText(
-                                              amount: basePrice,
-                                              fontSize: 14,
-                                              color: AppColors.textPrimary,
-                                            ),
-
-                                          // Stock Badge
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: isLowStock ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(
-                                                color: isLowStock ? const Color(0xFFFCA5A5) : const Color(0xFFA7F3D0),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              isLowStock ? 'Low Stock ($stock)' : 'In Stock ($stock)',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                color: isLowStock ? const Color(0xFFDC2626) : const Color(0xFF059669),
-                                              ),
-                                            ),
+                                  // Product Info Stack
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textPrimary,
                                           ),
-                                        ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'SKU: $sku',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            // Price Display with Tabular Figures CurrencyText (Item 2)
+                                            if (discountPrice != null) ...[
+                                              CurrencyText(
+                                                amount: discountPrice,
+                                                fontSize: 14,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                              CurrencyText(
+                                                amount: basePrice,
+                                                fontSize: 11,
+                                                color: AppColors.textMuted,
+                                                decoration: TextDecoration.lineThrough,
+                                              ),
+                                            ] else
+                                              CurrencyText(
+                                                amount: basePrice,
+                                                fontSize: 14,
+                                                color: AppColors.textPrimary,
+                                              ),
+
+                                            // Stock Badge
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isLowStock ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: isLowStock ? const Color(0xFFFCA5A5) : const Color(0xFFA7F3D0),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                isLowStock ? 'Low Stock ($stock)' : 'In Stock ($stock)',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: isLowStock ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Action Buttons (Edit & Delete)
+                                  Row(
+                                    children: [
+                                      AnimatedTapButton(
+                                        scaleDown: 0.88,
+                                        onTap: () => _openProductFormScreen(initialProduct: item),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(6.0),
+                                          child: Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
+                                        ),
+                                      ),
+                                      AnimatedTapButton(
+                                        scaleDown: 0.88,
+                                        onTap: () => _deleteProduct(id, name),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(6.0),
+                                          child: Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
-
-                                // Action Buttons (Edit & Delete)
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
-                                      onPressed: () => _openProductFormScreen(initialProduct: item),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                                      onPressed: () => _deleteProduct(id, name),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         },

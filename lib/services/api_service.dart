@@ -423,21 +423,38 @@ class ApiService {
 
   /// PUT /users/detail (Update logged in user profile details)
   Future<Map<String, dynamic>> updateUserProfile({
-    required String firstName,
-    required String lastName,
+    String? firstName,
+    String? lastName,
+    String? storeName,
+    String? logoUrl,
   }) async {
-    final body = {
-      'first_name': firstName,
-      'last_name': lastName,
-    };
-
     final savedUser = (await getUserInfo()) ?? {};
     final updatedMap = Map<String, dynamic>.from(savedUser);
-    updatedMap['first_name'] = firstName;
-    updatedMap['last_name'] = lastName;
-    final fName = firstName.trim();
-    if (fName.isNotEmpty) {
-      updatedMap['store_name'] = '$fName Store';
+
+    final String effectiveFirstName = firstName ?? (savedUser['first_name'] ?? '').toString();
+    final String effectiveLastName = lastName ?? (savedUser['last_name'] ?? '').toString();
+
+    final body = <String, dynamic>{
+      if (firstName != null && firstName.isNotEmpty) 'first_name': firstName,
+      if (lastName != null && lastName.isNotEmpty) 'last_name': lastName,
+      if (storeName != null && storeName.isNotEmpty) 'store_name': storeName,
+      if (logoUrl != null && logoUrl.isNotEmpty) ...{
+        'logo_url': logoUrl,
+        'image': logoUrl,
+        'avatar': logoUrl,
+      },
+    };
+
+    if (firstName != null) updatedMap['first_name'] = firstName;
+    if (lastName != null) updatedMap['last_name'] = lastName;
+    if (logoUrl != null && logoUrl.isNotEmpty) updatedMap['logo_url'] = logoUrl;
+    if (storeName != null && storeName.isNotEmpty) {
+      updatedMap['store_name'] = storeName;
+    } else if (updatedMap['store_name'] == null || updatedMap['store_name'].toString().isEmpty) {
+      final fName = effectiveFirstName.trim();
+      if (fName.isNotEmpty) {
+        updatedMap['store_name'] = '$fName Store';
+      }
     }
 
     // Persist immediately locally to both active user storage and permanent edited overlay storage
@@ -496,6 +513,373 @@ class ApiService {
       'message': 'Profile details updated successfully!',
       'user': updatedMap,
     };
+  }
+
+  /// POST /users/delete (Deletes user account by ID)
+  Future<Map<String, dynamic>> deleteUserAccount(int userId) async {
+    try {
+      final token = await getToken();
+      final res = await http.post(
+        Uri.parse('$baseUrl/users/delete'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'id': userId}),
+      );
+      if (res.statusCode == 200) {
+        return {'success': true, 'message': 'Account deleted successfully'};
+      }
+      final data = _safeJsonDecode(res.body);
+      return {'success': false, 'message': data?['message'] ?? 'Failed to delete account'};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // --- CMS Content & Store Branding APIs ---
+
+  /// GET /cms/content (Fetch all CMS content including header, contact, whatsapp)
+  Future<Map<String, dynamic>> getCmsContent() async {
+    try {
+      final headers = await _headers();
+      final res = await http.get(
+        Uri.parse('$baseUrl/cms/content'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final data = _safeJsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          await _storage.write(key: 'cached_cms_content', value: jsonEncode(data));
+          return data;
+        }
+      }
+    } catch (e) {
+      debugPrint('getCmsContent error: $e');
+    }
+
+    try {
+      final cached = await _storage.read(key: 'cached_cms_content');
+      if (cached != null && cached.isNotEmpty) {
+        final decoded = _safeJsonDecode(cached);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
+
+    return {};
+  }
+
+  /// PUT /cms/content/header (Update store header, logo, title)
+  Future<Map<String, dynamic>> updateCmsHeader(Map<String, dynamic> headerData) async {
+    try {
+      final headers = await _headers();
+      final res = await http.put(
+        Uri.parse('$baseUrl/cms/content/header'),
+        headers: headers,
+        body: jsonEncode(headerData),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = _safeJsonDecode(res.body);
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data?['message'] ?? 'Failed to update header'};
+    } catch (e) {
+      debugPrint('updateCmsHeader error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// PUT /cms/content/contact (Update shop address, phone, email for receipts)
+  Future<Map<String, dynamic>> updateCmsContact(Map<String, dynamic> contactData) async {
+    try {
+      final headers = await _headers();
+      final res = await http.put(
+        Uri.parse('$baseUrl/cms/content/contact'),
+        headers: headers,
+        body: jsonEncode(contactData),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = _safeJsonDecode(res.body);
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data?['message'] ?? 'Failed to update contact'};
+    } catch (e) {
+      debugPrint('updateCmsContact error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// PUT /cms/content/whatsapp (Update WhatsApp number for digital receipts)
+  Future<Map<String, dynamic>> updateCmsWhatsapp(Map<String, dynamic> whatsappData) async {
+    try {
+      final headers = await _headers();
+      final res = await http.put(
+        Uri.parse('$baseUrl/cms/content/whatsapp'),
+        headers: headers,
+        body: jsonEncode(whatsappData),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = _safeJsonDecode(res.body);
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data?['message'] ?? 'Failed to update whatsapp'};
+    } catch (e) {
+      debugPrint('updateCmsWhatsapp error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// GET /store/{userId} (Fetch public/store profile by userId)
+  Future<Map<String, dynamic>?> getStoreDetail(dynamic userId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/store/$userId'),
+      ).timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final data = _safeJsonDecode(res.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Consolidated Store Branding helper
+  Future<Map<String, dynamic>> getStoreBranding() async {
+    try {
+      final local = await _storage.read(key: 'store_branding');
+      if (local != null && local.isNotEmpty) {
+        final decoded = _safeJsonDecode(local);
+        if (decoded is Map<String, dynamic>) {
+          String addr = (decoded['address'] ?? '').toString().trim();
+          if (addr.contains('Market Street') || addr.contains('San Francisco')) addr = '';
+          String ph = (decoded['phone'] ?? '').toString().trim();
+          if (ph.contains('555')) ph = '';
+          String wa = (decoded['whatsapp'] ?? '').toString().trim();
+          if (wa.contains('555') || wa == '15550123456') wa = '';
+
+          decoded['address'] = addr;
+          decoded['phone'] = ph;
+          decoded['whatsapp'] = wa;
+
+          if ((decoded['store_name'] ?? '').toString().isNotEmpty) {
+            return decoded;
+          }
+        }
+      }
+    } catch (_) {}
+
+    final cms = await getCmsContent();
+    final header = cms['header'] is Map ? cms['header'] as Map : {};
+    final contact = cms['contact'] is Map ? cms['contact'] as Map : {};
+    final whatsapp = cms['whatsapp'] is Map ? cms['whatsapp'] as Map : {};
+
+    final user = await getUserInfo();
+    final fallbackStoreName = (user?['store_name'] ?? '').toString();
+
+    String storeName = (header['store_name'] ?? header['title'] ?? fallbackStoreName).toString().trim();
+    if (storeName == 'Admin Store' || storeName == 'User Store') storeName = '';
+
+    String address = (contact['address'] ?? '').toString().trim();
+    if (address.contains('Market Street') || address.contains('San Francisco')) address = '';
+
+    String phone = (contact['phone'] ?? '').toString().trim();
+    if (phone.contains('555') || phone.contains('012-3456')) phone = '';
+
+    String waNumber = (whatsapp['whatsapp_number'] ?? whatsapp['number'] ?? whatsapp['phoneNumber'] ?? '').toString().trim();
+    if (waNumber.contains('555') || waNumber == '15550123456') waNumber = '';
+
+    final branding = {
+      'store_name': storeName,
+      'logo_url': (header['logo_url'] ?? header['logo'] ?? '').toString().trim(),
+      'address': address,
+      'phone': phone,
+      'email': (contact['email'] ?? '').toString().trim(),
+      'whatsapp': waNumber,
+    };
+
+    await saveStoreBranding(branding);
+    return branding;
+  }
+
+  Future<void> saveStoreBranding(Map<String, dynamic> branding) async {
+    try {
+      await _storage.write(key: 'store_branding', value: jsonEncode(branding));
+    } catch (_) {}
+  }
+
+  Future<bool> isStoreSetupCompleted() async {
+    final flag = await _storage.read(key: 'store_setup_completed');
+    if (flag == 'true') return true;
+    if (flag == 'false') return false;
+
+    // If flag is unset, only consider completed if local store branding was explicitly configured
+    final local = await _storage.read(key: 'store_branding');
+    if (local != null && local.isNotEmpty) {
+      final decoded = _safeJsonDecode(local);
+      if (decoded is Map<String, dynamic>) {
+        final name = (decoded['store_name'] ?? '').toString().trim();
+        if (name.isNotEmpty && name != 'Admin Store' && name != 'User Store' && name != 'POS STORE') {
+          await _storage.write(key: 'store_setup_completed', value: 'true');
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  Future<void> setStoreSetupCompleted(bool completed) async {
+    await _storage.write(key: 'store_setup_completed', value: completed ? 'true' : 'false');
+  }
+
+  Future<void> saveSetupDraft(Map<String, dynamic> draft) async {
+    try {
+      await _storage.write(key: 'pos_setup_draft', value: jsonEncode(draft));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> getSetupDraft() async {
+    try {
+      final str = await _storage.read(key: 'pos_setup_draft');
+      if (str != null && str.isNotEmpty) {
+        final decoded = _safeJsonDecode(str);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> clearSetupDraft() async {
+    try {
+      await _storage.delete(key: 'pos_setup_draft');
+    } catch (_) {}
+  }
+
+  // --- Billing & Tax Preferences ---
+  Future<Map<String, dynamic>> getBillingSettings() async {
+    try {
+      final str = await _storage.read(key: 'pos_billing_settings');
+      if (str != null && str.isNotEmpty) {
+        final decoded = _safeJsonDecode(str);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
+    return {
+      'currency_symbol': 'LKR',
+      'currency_code': 'LKR',
+      'tax_rate': 0.0,
+      'tax_included': true,
+      'thank_you_message': 'Thank you for shopping with us! Please come again.',
+      'return_policy': 'Returns accepted within 7 days with original receipt. No cash refunds.',
+    };
+  }
+
+  Future<void> saveBillingSettings(Map<String, dynamic> settings) async {
+    try {
+      await _storage.write(key: 'pos_billing_settings', value: jsonEncode(settings));
+    } catch (_) {}
+  }
+
+  // --- Hardware & Terminal Preferences ---
+  Future<Map<String, dynamic>> getHardwareSettings() async {
+    try {
+      final str = await _storage.read(key: 'pos_hardware_settings');
+      if (str != null && str.isNotEmpty) {
+        final decoded = _safeJsonDecode(str);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
+    return {
+      'paper_size': '58mm',
+      'auto_print': true,
+      'scanner_mode': 'camera',
+      'payment_methods': ['Cash', 'Card', 'Bank Transfer / QR Pay'],
+    };
+  }
+
+  Future<void> saveHardwareSettings(Map<String, dynamic> settings) async {
+    try {
+      await _storage.write(key: 'pos_hardware_settings', value: jsonEncode(settings));
+    } catch (_) {}
+  }
+
+  /// Seed Demo Starter Products for first-time store owners
+  Future<bool> seedDemoProducts({String categoryName = 'General'}) async {
+    try {
+      final cleanCat = categoryName.trim().isEmpty ? 'General' : categoryName.trim();
+      final slug = cleanCat.toLowerCase().replaceAll(' ', '-');
+
+      // 1. Create Category
+      await createCategory({
+        'name': cleanCat,
+        'slug': slug,
+        'description': '$cleanCat merchandise and products',
+        'status': 'active',
+      });
+
+      // 2. Fetch categories to find created ID
+      final cats = await getCategories(forceRefresh: true);
+      int targetCatId = 1;
+      for (var c in cats) {
+        if (c is Map && c['name']?.toString().toLowerCase() == cleanCat.toLowerCase()) {
+          targetCatId = int.tryParse(c['id']?.toString() ?? '1') ?? 1;
+          break;
+        }
+      }
+      if (targetCatId == 1 && cats.isNotEmpty && cats.first is Map) {
+        targetCatId = int.tryParse(cats.first['id']?.toString() ?? '1') ?? 1;
+      }
+
+      // 3. Create 3 standard quick-starter products
+      final demoItems = [
+        {
+          'category_id': targetCatId,
+          'name': 'Fresh Milk 1L',
+          'sku': 'MILK-1L-${DateTime.now().millisecond % 900}',
+          'price': 480.0,
+          'discount_price': 450.0,
+          'stock': 35,
+          'status': 'active',
+          'short_description': 'Pasteurized fresh whole milk carton 1L',
+          'main_image': 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80',
+        },
+        {
+          'category_id': targetCatId,
+          'name': 'White Sandwich Bread 450g',
+          'sku': 'BREAD-450G-${DateTime.now().millisecond % 900}',
+          'price': 190.0,
+          'discount_price': 190.0,
+          'stock': 24,
+          'status': 'active',
+          'short_description': 'Freshly baked sliced white sandwich bread loaf',
+          'main_image': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
+        },
+        {
+          'category_id': targetCatId,
+          'name': 'Pure Ceylon Black Tea 200g',
+          'sku': 'TEA-200G-${DateTime.now().millisecond % 900}',
+          'price': 380.0,
+          'discount_price': 350.0,
+          'stock': 40,
+          'status': 'active',
+          'short_description': 'Premium single origin highland black tea pack',
+          'main_image': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80',
+        },
+      ];
+
+      for (var item in demoItems) {
+        await createProduct(item);
+      }
+
+      invalidateCatalogCache();
+      return true;
+    } catch (e) {
+      debugPrint('seedDemoProducts error: $e');
+      return false;
+    }
   }
   dynamic _safeJsonDecode(String body) {
     try {
@@ -755,7 +1139,140 @@ class ApiService {
     return localList;
   }
 
-  /// POST /orders (Checkout Order Creation)
+  // ==========================================
+  // --- ORDERS & BILLING APIS ---
+  // ==========================================
+
+  /// 1. POST /orders/{userId} (Place In-Store Bill / Order)
+  Future<Map<String, dynamic>> placeOrder({
+    dynamic userId,
+    required String paymentMethod,
+    required double totalAmount,
+    double? subtotal,
+    double? paidAmount,
+    double? changeAmount,
+    required List<dynamic> items,
+    Map<String, dynamic>? customerInfo,
+  }) async {
+    dynamic effectiveUserId = userId;
+    if (effectiveUserId == null) {
+      final user = await getUserInfo();
+      effectiveUserId = user?['id'] ?? 1;
+    }
+
+    final double effectiveSubtotal = subtotal ?? totalAmount;
+    final double effectivePaid = paidAmount ?? totalAmount;
+    final double effectiveChange = changeAmount ?? (effectivePaid - totalAmount).clamp(0.0, double.infinity);
+
+    final mappedItems = items.map((item) {
+      final map = item is Map<String, dynamic> ? item : (item as Map);
+      final id = map['id'] ?? map['product_id'] ?? map['productId'];
+      final sku = map['sku'] ?? map['product_sku'] ?? 'SKU-$id';
+      final name = map['name'] ?? map['product_name'] ?? 'Item';
+      final price = double.tryParse(map['price']?.toString() ?? map['unit_price']?.toString() ?? '0') ?? 0.0;
+      final discountPrice = double.tryParse(map['discount_price']?.toString() ?? '') ?? price;
+      final effectivePrice = (discountPrice > 0 && discountPrice < price) ? discountPrice : (discountPrice > 0 ? discountPrice : price);
+      final qty = int.tryParse(map['quantity']?.toString() ?? map['qty']?.toString() ?? '1') ?? 1;
+      final variation = map['selectedVariation'] ?? map['selected_variation'] ?? map['variation'];
+
+      return {
+        'productId': id,
+        'product_id': id,
+        'sku': sku,
+        'name': name,
+        'price': effectivePrice,
+        'unit_price': effectivePrice,
+        'quantity': qty,
+        'selectedVariation': variation,
+        'selected_variation': variation,
+        'totalPrice': qty * effectivePrice,
+        'total_price': qty * effectivePrice,
+      };
+    }).toList();
+
+    final String customerName = customerInfo?['name'] ?? customerInfo?['customer_name'] ?? 'Walk-in Customer';
+    final String customerPhone = customerInfo?['phone'] ?? customerInfo?['customer_phone'] ?? '0770000000';
+    final String customerAddress = customerInfo?['address'] ?? customerInfo?['customer_address'] ?? 'In-Store Counter';
+
+    final body = {
+      'userId': effectiveUserId,
+      'cashier_id': effectiveUserId,
+      'cashierId': effectiveUserId,
+      'customer_name': customerName,
+      'customerName': customerName,
+      'customer_phone': customerPhone,
+      'customerPhone': customerPhone,
+      'customer_address': customerAddress,
+      'customerAddress': customerAddress,
+      'payment_method': paymentMethod,
+      'paymentMethod': paymentMethod,
+      'subtotal': effectiveSubtotal,
+      'total_amount': totalAmount,
+      'totalAmount': totalAmount,
+      'paid_amount': effectivePaid,
+      'paidAmount': effectivePaid,
+      'change_amount': effectiveChange,
+      'changeAmount': effectiveChange,
+      'customer': customerInfo,
+      'items': mappedItems,
+    };
+
+    try {
+      final headers = await _headers();
+      // Try POST /orders/{userId} first, fallback to /orders if not found
+      http.Response res = await http.post(
+        Uri.parse('$baseUrl/orders/$effectiveUserId'),
+        headers: headers,
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 404) {
+        res = await http.post(
+          Uri.parse('$baseUrl/orders'),
+          headers: headers,
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 10));
+      }
+
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        if (data is Map<String, dynamic>) {
+          final receiptNo = data['receipt_number'] ?? data['order_number'] ?? data['order_id'] ?? data['id'] ?? 'INV-${DateTime.now().millisecondsSinceEpoch % 1000000}';
+          return {
+            'success': true,
+            'order_id': data['order_id'] ?? data['id'] ?? receiptNo,
+            'receipt_number': receiptNo,
+            'status': data['status'] ?? 'completed',
+            'receipt_url': data['receipt_url'],
+            'data': data,
+          };
+        }
+      }
+
+      final errorMsg = data is Map<String, dynamic> ? (data['message'] ?? data['error'] ?? 'Order creation failed') : 'Order failed';
+      return {
+        'success': false,
+        'message': errorMsg.toString(),
+      };
+    } catch (e) {
+      debugPrint('placeOrder error (saving offline): $e');
+      try {
+        await OfflineSyncService().queueOrder(body);
+      } catch (_) {}
+
+      final fallbackReceipt = 'OFFLINE-${DateTime.now().millisecondsSinceEpoch % 1000000}';
+      return {
+        'success': true,
+        'order_id': 'ORD-OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
+        'receipt_number': fallbackReceipt,
+        'status': 'offline_queued',
+        'is_offline': true,
+        'message': 'Bill processed & saved locally (Offline mode)! Will auto-sync when online.',
+      };
+    }
+  }
+
+  /// Backward-compatible wrapper for existing calls
   Future<Map<String, dynamic>> createOrder({
     required int cashierId,
     required String paymentMethod,
@@ -764,69 +1281,235 @@ class ApiService {
     required double changeAmount,
     required List<dynamic> items,
   }) async {
-    final body = {
-      'cashier_id': cashierId,
-      'payment_method': paymentMethod,
-      'total_amount': totalAmount,
-      'paid_amount': paidAmount,
-      'change_amount': changeAmount,
-      'items': items.map((item) {
-        final map = item is Map<String, dynamic> ? item : (item as Map);
-        final price = double.tryParse(map['price']?.toString() ?? map['unit_price']?.toString() ?? '0') ?? 0.0;
-        final discountPrice = double.tryParse(map['discount_price']?.toString() ?? '') ?? price;
-        final unitPrice = discountPrice > 0 ? discountPrice : price;
-        final qty = int.tryParse(map['quantity']?.toString() ?? map['qty']?.toString() ?? '1') ?? 1;
+    return placeOrder(
+      userId: cashierId,
+      paymentMethod: paymentMethod,
+      totalAmount: totalAmount,
+      paidAmount: paidAmount,
+      changeAmount: changeAmount,
+      items: items,
+    );
+  }
 
-        return {
-          'product_id': map['id'] ?? map['product_id'],
-          'name': map['name'] ?? 'Item',
-          'quantity': qty,
-          'unit_price': unitPrice,
-          'total_price': qty * unitPrice,
-        };
-      }).toList(),
+  /// 2. GET /orders (Sales / Bills History)
+  Future<Map<String, dynamic>> getOrders({
+    String? date,
+    String? paymentStatus,
+    String? orderStatus,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
     };
+    if (date != null && date.isNotEmpty) queryParams['date'] = date;
+    if (paymentStatus != null && paymentStatus.isNotEmpty && paymentStatus != 'All') {
+      queryParams['payment_status'] = paymentStatus.toLowerCase();
+    }
+    if (orderStatus != null && orderStatus.isNotEmpty && orderStatus != 'All') {
+      queryParams['order_status'] = orderStatus.toLowerCase();
+    }
+
+    final uri = Uri.parse('$baseUrl/orders').replace(queryParameters: queryParams);
 
     try {
       final headers = await _headers();
-      final res = await http.post(
-        Uri.parse('$baseUrl/orders'),
+      final res = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List) {
+          return {'success': true, 'orders': data};
+        } else if (data is Map<String, dynamic>) {
+          final list = data['orders'] ?? data['data'] ?? [];
+          return {'success': true, 'orders': list, 'meta': data['meta'] ?? data['pagination']};
+        }
+      }
+      return {'success': false, 'orders': [], 'message': 'Failed to load bills (HTTP ${res.statusCode})'};
+    } catch (e) {
+      debugPrint('getOrders network error: $e');
+      return {'success': false, 'orders': [], 'message': 'Network error: $e'};
+    }
+  }
+
+  /// 3. GET /orders/{id} (Bill Details & Thermal Re-Print)
+  Future<Map<String, dynamic>> getOrderDetails(dynamic orderId) async {
+    try {
+      final headers = await _headers();
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          return {'success': true, 'order': data['order'] ?? data['data'] ?? data};
+        }
+      }
+      return {'success': false, 'message': 'Failed to fetch bill details (HTTP ${res.statusCode})'};
+    } catch (e) {
+      debugPrint('getOrderDetails error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// 4. PUT /orders/{id} (Cancel Bill / Refund)
+  Future<Map<String, dynamic>> updateOrderStatus(
+    dynamic orderId, {
+    String? orderStatus,
+    String? paymentStatus,
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{};
+    if (orderStatus != null) {
+      body['order_status'] = orderStatus;
+      body['orderStatus'] = orderStatus;
+    }
+    if (paymentStatus != null) {
+      body['payment_status'] = paymentStatus;
+      body['paymentStatus'] = paymentStatus;
+    }
+    if (reason != null && reason.isNotEmpty) {
+      body['reason'] = reason;
+      body['cancel_reason'] = reason;
+    }
+
+    try {
+      final headers = await _headers();
+      final res = await http.put(
+        Uri.parse('$baseUrl/orders/$orderId'),
         headers: headers,
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 10));
 
       final data = jsonDecode(res.body);
-      if (res.statusCode == 201 || res.statusCode == 200) {
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        return {
+          'success': true,
+          'message': data is Map<String, dynamic> ? (data['message'] ?? 'Bill status updated') : 'Updated',
+          'data': data,
+        };
+      }
+      final msg = data is Map<String, dynamic> ? (data['message'] ?? data['error'] ?? 'Update failed') : 'Failed';
+      return {'success': false, 'message': msg.toString()};
+    } catch (e) {
+      debugPrint('updateOrderStatus error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// 5. DELETE /orders/{id} (Permanently delete an order / bill - Admin only)
+  Future<Map<String, dynamic>> deleteOrder(dynamic orderId) async {
+    try {
+      final headers = await _headers();
+      final res = await http.delete(
+        Uri.parse('$baseUrl/orders/$orderId'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      final data = _safeJsonDecode(res.body);
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        return {
+          'success': true,
+          'message': data is Map<String, dynamic> ? (data['message'] ?? 'Order deleted successfully') : 'Order deleted successfully',
+        };
+      }
+      final msg = data is Map<String, dynamic> ? (data['message'] ?? data['error'] ?? 'Delete failed') : 'Failed (HTTP ${res.statusCode})';
+      return {'success': false, 'message': msg.toString()};
+    } catch (e) {
+      debugPrint('deleteOrder error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// 6. GET /orders/stats (Daily Sales Summary / POS KPI)
+  Future<Map<String, dynamic>> getOrderStats({String? date}) async {
+    try {
+      final headers = await _headers();
+      final query = (date != null && date.isNotEmpty) ? '?date=$date' : '';
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/stats$query'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         if (data is Map<String, dynamic>) {
+          final stats = data['stats'] ?? data['data'] ?? data;
           return {
             'success': true,
-            'order_id': data['order_id'] ?? data['id'] ?? 'ORD-${DateTime.now().millisecondsSinceEpoch}',
-            'status': data['status'] ?? 'completed',
-            'receipt_url': data['receipt_url'],
-            'data': data,
+            'total_revenue': double.tryParse((stats['total_revenue'] ?? stats['totalRevenue'] ?? stats['revenue'] ?? 0.0).toString()) ?? 0.0,
+            'total_bills': int.tryParse((stats['total_bills'] ?? stats['total_orders'] ?? stats['totalOrders'] ?? 0).toString()) ?? 0,
+            'avg_bill_value': double.tryParse((stats['avg_bill_value'] ?? stats['avgOrderValue'] ?? 0.0).toString()) ?? 0.0,
+            'paid_bills': int.tryParse((stats['paid_bills'] ?? stats['paidOrders'] ?? 0).toString()) ?? 0,
+            'cancelled_bills': int.tryParse((stats['cancelled_bills'] ?? stats['cancelledOrders'] ?? 0).toString()) ?? 0,
+            'raw': stats,
           };
         }
       }
-
-      final errorMsg = data is Map<String, dynamic> ? (data['message'] ?? data['error'] ?? 'Order failed') : 'Order failed';
-      return {
-        'success': false,
-        'message': errorMsg.toString(),
-      };
+      return {'success': false, 'message': 'Stats unavailable (HTTP ${res.statusCode})'};
     } catch (e) {
-      debugPrint('createOrder error (saving offline): $e');
-      try {
-        await OfflineSyncService().queueOrder(body);
-      } catch (_) {}
-
-      return {
-        'success': true,
-        'order_id': 'ORD-OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
-        'status': 'offline_queued',
-        'is_offline': true,
-        'message': 'Order processed & saved locally (Offline mode)! Will auto-sync when online.',
-      };
+      debugPrint('getOrderStats error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
     }
+  }
+
+  /// 6. GET /orders/{userId}/search (Customer / Bill Search)
+  Future<List<dynamic>> searchOrders({
+    required dynamic userId,
+    required String query,
+  }) async {
+    if (query.trim().isEmpty) return [];
+
+    try {
+      final headers = await _headers();
+      final encodedQuery = Uri.encodeComponent(query.trim());
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/$userId/search?query=$encodedQuery&q=$encodedQuery'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List) return data;
+        if (data is Map<String, dynamic>) {
+          final list = data['orders'] ?? data['data'] ?? data['results'] ?? [];
+          if (list is List) return list;
+        }
+      }
+    } catch (e) {
+      debugPrint('searchOrders error: $e');
+    }
+    return [];
+  }
+
+  /// 7. GET /orders/{userId}/track/{orderNumber} (Track by Bill Number)
+  Future<Map<String, dynamic>?> trackOrderByNumber({
+    required dynamic userId,
+    required String orderNumber,
+  }) async {
+    if (orderNumber.trim().isEmpty) return null;
+
+    try {
+      final headers = await _headers();
+      final cleanNum = Uri.encodeComponent(orderNumber.trim());
+      final res = await http.get(
+        Uri.parse('$baseUrl/orders/$userId/track/$cleanNum'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          return data['order'] ?? data['data'] ?? data;
+        }
+      }
+    } catch (e) {
+      debugPrint('trackOrderByNumber error: $e');
+    }
+    return null;
   }
 
   // --- Categories APIs ---

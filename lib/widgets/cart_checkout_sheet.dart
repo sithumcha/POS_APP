@@ -4,7 +4,8 @@ import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/receipt_screen.dart';
 import 'swipe_to_confirm.dart';
-import 'currency_text.dart';
+import 'phone_input_with_country_code.dart';
+import 'ui_animation_helper.dart';
 
 class CartCheckoutSheet extends StatefulWidget {
   final List<Map<String, dynamic>> cartItems;
@@ -29,8 +30,11 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   // Selected Payment Method: 0 = Cash, 1 = Card, 2 = QR Code
   int _selectedPaymentMethod = 0;
 
-  // Selected Discount Percentage: 0%, 5%, 10%, 15%
+  // Discount configuration: Percentage (%) or Fixed Amount (LKR)
+  bool _isDiscountAmountMode = false;
   double _discountPercentage = 0.0;
+  double _customDiscountAmount = 0.0;
+  final TextEditingController _discountAmountController = TextEditingController();
 
   // Cash Tendered string input
   String _cashTenderedInput = '';
@@ -39,6 +43,15 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
   String _currentCashierName = 'Cashier';
   String _currentStoreName = 'QUICKE POS Store';
+  String _counterName = 'Counter 01';
+  String? _placedReceiptNumber;
+
+  // Customer Details (Optional)
+  final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerPhoneController = TextEditingController();
+  String _customerPhoneCountryCode = '+94';
+  String _finalCustomerName = 'Walk-in Customer';
+  String _finalCustomerPhone = '0770000000';
 
   @override
   void initState() {
@@ -50,6 +63,9 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   @override
   void dispose() {
     _cashTenderedController.dispose();
+    _discountAmountController.dispose();
+    _customerNameController.dispose();
+    _customerPhoneController.dispose();
     super.dispose();
   }
 
@@ -57,10 +73,22 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     final info = await _apiService.getUserInfo();
     if (!mounted || info == null) return;
     setState(() {
-      final fname = info['first_name'] ?? '';
-      final lname = info['last_name'] ?? '';
+      final fname = info['first_name'] ?? info['firstName'] ?? '';
+      final lname = info['last_name'] ?? info['lastName'] ?? '';
       final full = '$fname $lname'.trim();
-      if (full.isNotEmpty) _currentCashierName = full;
+      final directName = info['name']?.toString().trim() ?? '';
+
+      if (full.isNotEmpty) {
+        _currentCashierName = full;
+      } else if (directName.isNotEmpty) {
+        _currentCashierName = directName;
+      } else if (info['email'] != null) {
+        _currentCashierName = info['email'].toString().split('@').first;
+      }
+
+      if (info['counter'] != null && info['counter'].toString().isNotEmpty) {
+        _counterName = info['counter'].toString();
+      }
       if (info['store_name'] != null && info['store_name'].toString().isNotEmpty) {
         _currentStoreName = info['store_name'].toString();
       }
@@ -78,7 +106,20 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   }
 
   double get _discountAmount {
-    return _subtotal * (_discountPercentage / 100.0);
+    if (_isDiscountAmountMode) {
+      return _customDiscountAmount.clamp(0.0, _subtotal);
+    } else {
+      return (_subtotal * (_discountPercentage / 100.0)).clamp(0.0, _subtotal);
+    }
+  }
+
+  double get _effectiveDiscountPercentage {
+    if (_subtotal <= 0) return 0.0;
+    if (_isDiscountAmountMode) {
+      return (_discountAmount / _subtotal) * 100.0;
+    } else {
+      return _discountPercentage;
+    }
   }
 
   double get _grandTotal {
@@ -135,15 +176,43 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
     final cashierId = userInfo?['id'] is int ? userInfo!['id'] as int : 14;
     final paymentMethodStr = _selectedPaymentMethod == 0 ? 'cash' : (_selectedPaymentMethod == 1 ? 'card' : 'qr');
 
-    // Submit Checkout Payload to Backend (POST /orders)
-    _apiService.createOrder(
-      cashierId: cashierId,
+    final enteredName = _customerNameController.text.trim();
+    final enteredPhone = _customerPhoneController.text.trim();
+
+    _finalCustomerName = enteredName.isNotEmpty ? enteredName : 'Walk-in Customer';
+    if (enteredPhone.isNotEmpty) {
+      final cleanDigits = enteredPhone.replaceAll(RegExp(r'[^0-9]'), '');
+      final stripped = cleanDigits.startsWith('0') ? cleanDigits.substring(1) : cleanDigits;
+      _finalCustomerPhone = '$_customerPhoneCountryCode $stripped'.trim();
+    } else {
+      _finalCustomerPhone = '0770000000';
+    }
+    const String finalCustomerAddress = 'In-Store Counter';
+
+    // Submit In-Store Bill / Order Payload to Backend (POST /orders/{userId})
+    final res = await _apiService.placeOrder(
+      userId: cashierId,
       paymentMethod: paymentMethodStr,
+      subtotal: _subtotal,
       totalAmount: _grandTotal,
       paidAmount: _cashTendered > 0 ? _cashTendered : _grandTotal,
       changeAmount: _changeDue >= 0 ? _changeDue : 0.0,
       items: _localCart,
+      customerInfo: {
+        'name': _finalCustomerName,
+        'customer_name': _finalCustomerName,
+        'phone': _finalCustomerPhone,
+        'customer_phone': _finalCustomerPhone,
+        'address': finalCustomerAddress,
+        'customer_address': finalCustomerAddress,
+      },
     );
+
+    if (mounted) {
+      setState(() {
+        _placedReceiptNumber = res['receipt_number']?.toString();
+      });
+    }
 
     // Trigger push notification to Phone Notification Bar & In-app center
     NotificationService().triggerOrderCompletionNotification(context, _grandTotal);
@@ -182,48 +251,88 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
           // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Flexible(
-                        child: Text(
-                          'Cart Review & Checkout',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.black,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Flexible(
+                            child: Text(
+                              'Cart Review & Checkout',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.black,
+                              ),
+                            ),
                           ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_localCart.length} items',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded, color: Colors.black),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                // Cashier & Shift Info Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${_localCart.length} items',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.badge_outlined, size: 13, color: AppColors.textSecondary),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Cashier: $_currentCashierName ($_counterName)',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: Colors.black),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -371,7 +480,110 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                         ),
                         const SizedBox(height: 20),
 
-                        // --- 2. BILLING SUMMARY ---
+                        // --- 2. CUSTOMER DETAILS CARD (OPTIONAL) ---
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.person_outline_rounded, size: 18, color: Colors.black),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Customer Details',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFECFDF5),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                                    ),
+                                    child: const Text(
+                                      'Optional • Auto Walk-in',
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  // Customer Name Field
+                                  Expanded(
+                                    flex: 5,
+                                    child: TextField(
+                                      controller: _customerNameController,
+                                      textCapitalization: TextCapitalization.words,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: const Color(0xFFF8FAFC),
+                                        hintText: 'Walk-in Customer (Default)',
+                                        hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                        prefixIcon: const Icon(Icons.badge_outlined, size: 16, color: AppColors.textSecondary),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Colors.black, width: 1.5),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Customer Phone Field with Country Code Picker
+                                  Expanded(
+                                    flex: 6,
+                                    child: PhoneInputWithCountryCode(
+                                      hintText: 'Phone (077...)',
+                                      controller: _customerPhoneController,
+                                      selectedCountryCode: _customerPhoneCountryCode,
+                                      onCountryChanged: (code) => setState(() => _customerPhoneCountryCode = code),
+                                      borderRadius: 10,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Leave empty to automatically bill as "Walk-in Customer" (0770000000).',
+                                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // --- 3. BILLING SUMMARY ---
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -391,20 +603,89 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                               ),
                               const SizedBox(height: 8),
 
-                              // Discount Selector Chips
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              // Discount Section (Percent % or Fixed LKR Amount)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Discount', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                                  const SizedBox(width: 8),
-                                  Flexible(
-                                    child: SingleChildScrollView(
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Discount',
+                                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                      ),
+                                      // Mode Toggle: % vs LKR
+                                      Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _isDiscountAmountMode = false;
+                                                });
+                                              },
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: !_isDiscountAmountMode ? Colors.black : Colors.transparent,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  'Percent (%)',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: !_isDiscountAmountMode ? Colors.white : AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _isDiscountAmountMode = true;
+                                                });
+                                              },
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: _isDiscountAmountMode ? Colors.black : Colors.transparent,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  'Amount (LKR)',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: _isDiscountAmountMode ? Colors.white : AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  if (!_isDiscountAmountMode) ...[
+                                    // Percentage Mode Chips
+                                    SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: Row(
-                                        children: [0.0, 5.0, 10.0, 15.0].map((pct) {
+                                        children: [0.0, 5.0, 10.0, 15.0, 20.0].map((pct) {
                                           final isSelected = _discountPercentage == pct;
                                           return Padding(
-                                            padding: const EdgeInsets.only(left: 4),
+                                            padding: const EdgeInsets.only(right: 6),
                                             child: InkWell(
                                               onTap: () {
                                                 setState(() {
@@ -412,14 +693,14 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                                 });
                                               },
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                                 decoration: BoxDecoration(
                                                   color: isSelected ? Colors.black : Colors.white,
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  borderRadius: BorderRadius.circular(8),
                                                   border: Border.all(color: isSelected ? Colors.black : const Color(0xFFCBD5E1)),
                                                 ),
                                                 child: Text(
-                                                  '${pct.toInt()}%',
+                                                  pct == 0.0 ? 'None (0%)' : '${pct.toInt()}%',
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
@@ -432,18 +713,113 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                                         }).toList(),
                                       ),
                                     ),
-                                  ),
+                                  ] else ...[
+                                    // Fixed Amount (LKR) Input Field & Presets
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Container(
+                                            height: 38,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                                            ),
+                                            child: TextField(
+                                              controller: _discountAmountController,
+                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                              decoration: const InputDecoration(
+                                                hintText: 'Enter discount amount...',
+                                                hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                                prefixText: 'LKR ',
+                                                prefixStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                border: InputBorder.none,
+                                              ),
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  _customDiscountAmount = double.tryParse(val.trim()) ?? 0.0;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                        if (_customDiscountAmount > 0) ...[
+                                          const SizedBox(width: 6),
+                                          InkWell(
+                                            onTap: () {
+                                              _discountAmountController.clear();
+                                              setState(() {
+                                                _customDiscountAmount = 0.0;
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEE2E8),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [50.0, 100.0, 250.0, 500.0, 1000.0].map((amt) {
+                                          final isSelected = _customDiscountAmount == amt;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(right: 6),
+                                            child: InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _customDiscountAmount = amt;
+                                                  _discountAmountController.text = amt.toStringAsFixed(0);
+                                                });
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isSelected ? Colors.black : Colors.white,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: isSelected ? Colors.black : const Color(0xFFCBD5E1)),
+                                                ),
+                                                child: Text(
+                                                  'LKR ${amt.toInt()}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isSelected ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
 
                               if (_discountAmount > 0) ...[
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 8),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('Discount Amount', style: TextStyle(fontSize: 12, color: AppColors.error)),
+                                    Row(
+                                      children: [
+                                        const Text('Discount Deducted', style: TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600)),
+                                        const SizedBox(width: 4),
+                                        Text('(${_effectiveDiscountPercentage.toStringAsFixed(1)}% off)', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                      ],
+                                    ),
                                     Text('- LKR ${_discountAmount.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.error)),
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.error)),
                                   ],
                                 ),
                               ],
@@ -739,19 +1115,29 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   Widget _buildPaymentTab(int index, String label, IconData icon) {
     final isSelected = _selectedPaymentMethod == index;
     return Expanded(
-      child: InkWell(
+      child: AnimatedTapButton(
+        scaleDown: 0.94,
         onTap: () {
           setState(() {
             _selectedPaymentMethod = index;
           });
         },
-        borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? Colors.black : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.18),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -774,7 +1160,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   }
 
   Widget _buildPresetChip(String label, String value, {bool isPrimary = false, bool isDanger = false}) {
-    return InkWell(
+    return AnimatedTapButton(
+      scaleDown: 0.90,
       onTap: () {
         setState(() {
           if (value == 'CLEAR') {
@@ -792,7 +1179,6 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
           }
         });
       },
-      borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
@@ -809,7 +1195,15 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                     ? const Color(0xFFFCA5A5)
                     : const Color(0xFFE2E8F0),
           ),
-          boxShadow: isPrimary ? AppColors.softShadow : null,
+          boxShadow: isPrimary
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -857,9 +1251,9 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Receipt #INV-2026-0091 Printed',
-              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            Text(
+              'Receipt #${_placedReceiptNumber ?? 'INV-2026-0091'} Generated',
+              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
             ),
             const SizedBox(height: 20),
 
@@ -915,6 +1309,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                     builder: (context) => ReceiptScreen(
                       storeName: _currentStoreName,
                       cashierName: _currentCashierName,
+                      customerName: _finalCustomerName,
+                      customerPhone: _finalCustomerPhone,
                       orderItems: _localCart,
                       subtotal: _subtotal,
                       discountAmount: _discountAmount,
@@ -922,6 +1318,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                       paymentMethod: paymentMethodName,
                       cashTendered: _cashTendered,
                       changeDue: _changeDue >= 0 ? _changeDue : 0.0,
+                      receiptNumber: _placedReceiptNumber,
                     ),
                   ),
                 );

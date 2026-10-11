@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ui_animation_helper.dart';
 
 class CategorySetupScreen extends StatefulWidget {
   const CategorySetupScreen({super.key});
@@ -37,6 +38,8 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     super.dispose();
   }
 
+  /// 1. INITIAL BATCH LOADING:
+  /// Concurrently loads both main categories and subcategories from backend API.
   Future<void> _loadAllData() async {
     await Future.wait([
       _loadCategories(),
@@ -44,6 +47,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     ]);
   }
 
+  /// 2. CATEGORY ICON / IMAGE UPLOAD LOGIC:
+  /// Uses ImagePicker to select image from gallery, converts to bytes,
+  /// uploads to API storage endpoint, and updates image URL field.
   Future<void> _pickAndUploadImage({
     required StateSetter setModalState,
     required TextEditingController imageCtrl,
@@ -92,7 +98,8 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     }
   }
 
-  // --- API: GET /categories ---
+  /// 3. FETCH CATEGORIES (GET /categories):
+  /// Retrieves parent category list and updates UI state.
   Future<void> _loadCategories() async {
     setState(() {
       _isLoadingCategories = true;
@@ -886,92 +893,93 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                     final String? image = item['image'];
                     final bool isActive = _parseStatus(item['status']);
 
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
+                    return FadeSlideEntrance(
+                      delay: Duration(milliseconds: 30 * (index % 10)),
+                      child: HoverScaleCard(
+                        padding: const EdgeInsets.all(12),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          // Category Thumbnail Preview
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: image != null && image.isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
-                                      image,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(Icons.category_outlined, color: AppColors.textMuted),
-                                    ),
-                                  )
-                                : const Icon(Icons.category_outlined, color: AppColors.textMuted, size: 26),
-                          ),
-                          const SizedBox(width: 14),
-
-                          // Name, Slug & Status
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isActive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                                        borderRadius: BorderRadius.circular(6),
+                        scaleFactor: 1.018,
+                        child: Row(
+                          children: [
+                            // Category Thumbnail Preview
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: image != null && image.isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(
+                                        image,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.category_outlined, color: AppColors.textMuted),
                                       ),
-                                      child: Text(
-                                        isActive ? 'Active' : 'Inactive',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: isActive ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                    )
+                                  : const Icon(Icons.category_outlined, color: AppColors.textMuted, size: 26),
+                            ),
+                            const SizedBox(width: 14),
+
+                            // Name, Slug & Status
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isActive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          isActive ? 'Active' : 'Inactive',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isActive ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Slug: /$slug',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                ),
-                              ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Slug: /$slug',
+                                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
 
-                          // Edit & Delete Actions
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
-                            onPressed: () => _showCategoryModalForm(initialCategory: item),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                            onPressed: () => _deleteCategory(id, name),
-                          ),
-                        ],
+                            // Edit & Delete Actions
+                            AnimatedTapButton(
+                              scaleDown: 0.88,
+                              onTap: () => _showCategoryModalForm(initialCategory: item),
+                              child: const Padding(
+                                padding: EdgeInsets.all(6.0),
+                                child: Icon(Icons.edit_outlined, size: 20, color: Colors.black),
+                              ),
+                            ),
+                            AnimatedTapButton(
+                              scaleDown: 0.88,
+                              onTap: () => _deleteCategory(id, name),
+                              child: const Padding(
+                                padding: EdgeInsets.all(6.0),
+                                child: Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -1070,80 +1078,73 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                           final String parentName = parentCat['name']?.toString() ?? 'Parent Category';
                           final String? image = item['image']?.toString();
 
-                          return Material(
-                            color: Colors.transparent,
-                            child: InkWell(
+                          return FadeSlideEntrance(
+                            delay: Duration(milliseconds: 30 * (index % 10)),
+                            child: HoverScaleCard(
+                              padding: const EdgeInsets.all(12),
                               borderRadius: BorderRadius.circular(16),
+                              scaleFactor: 1.018,
                               onTap: () => _showSubcategoryModalForm(initialSubcategory: Map<String, dynamic>.from(item)),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.02),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
+                              child: Row(
+                                children: [
+                                  // Image Thumbnail
+                                  Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
                                     ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    // Image Thumbnail
-                                    Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF1F5F9),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      ),
-                                      child: image != null && image.isNotEmpty
-                                          ? ClipRRect(
-                                              borderRadius: BorderRadius.circular(12),
-                                              child: Image.network(
-                                                image,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) => const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted),
-                                              ),
-                                            )
-                                          : const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted, size: 24),
-                                    ),
-                                    const SizedBox(width: 14),
+                                    child: image != null && image.isNotEmpty
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Image.network(
+                                              image,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted),
+                                            ),
+                                          )
+                                        : const Icon(Icons.subdirectory_arrow_right_rounded, color: AppColors.textMuted, size: 24),
+                                  ),
+                                  const SizedBox(width: 14),
 
-                                    // Details
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'Parent: $parentName • /$slug',
-                                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                          ),
-                                        ],
-                                      ),
+                                  // Details
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Parent: $parentName • /$slug',
+                                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                        ),
+                                      ],
                                     ),
+                                  ),
 
-                                    // Edit & Delete Actions
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.black),
-                                      tooltip: 'Edit Subcategory',
-                                      onPressed: () => _showSubcategoryModalForm(initialSubcategory: Map<String, dynamic>.from(item)),
+                                  // Edit & Delete Actions
+                                  AnimatedTapButton(
+                                    scaleDown: 0.88,
+                                    onTap: () => _showSubcategoryModalForm(initialSubcategory: Map<String, dynamic>.from(item)),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(6.0),
+                                      child: Icon(Icons.edit_outlined, size: 20, color: Colors.black),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                                      tooltip: 'Delete Subcategory',
-                                      onPressed: () => _deleteSubcategory(id, name),
+                                  ),
+                                  AnimatedTapButton(
+                                    scaleDown: 0.88,
+                                    onTap: () => _deleteSubcategory(id, name),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(6.0),
+                                      child: Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           );

@@ -103,6 +103,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.dispose();
   }
 
+  /// 1. CATEGORY LOADING LOGIC:
+  /// Fetches all active categories from backend.
+  /// If editing an existing product, triggers subcategory loading for its preselected category.
   Future<void> _loadCategories() async {
     try {
       final cats = await _apiService.getCategories();
@@ -123,6 +126,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
+  /// 2. CASCADING SUBCATEGORY FETCHER:
+  /// Loads subcategories tied strictly to the selected parent category.
   Future<void> _loadSubcategories(int categoryId) async {
     setState(() {
       _isLoadingSubcategories = true;
@@ -143,6 +148,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
   }
 
+  /// 3. CATEGORY SELECTION CHANGE:
+  /// Resets subcategory choice when parent category changes, then fetches relevant subcategories.
   void _onCategoryChanged(int? newCatId) {
     setState(() {
       _selectedCategoryId = newCatId;
@@ -382,7 +389,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     );
   }
 
+  /// 4. PRODUCT CREATION / UPDATE SUBMISSION LOGIC:
+  /// Validates required text inputs, ensures a parent category is selected,
+  /// constructs the JSON payload, generates a unique SKU if left empty,
+  /// and executes either createProduct or updateProduct via ApiService.
   Future<void> _handleSaveProduct() async {
+    // Validate form inputs (name, price, stock, etc.)
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -394,6 +406,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       return;
     }
 
+    // Require category assignment
     if (_selectedCategoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -415,13 +428,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         : null;
     final int stock = int.tryParse(_stockController.text.trim()) ?? 10;
 
+    // Construct backend request payload
     final Map<String, dynamic> payload = {
       'category_id': _selectedCategoryId,
       'subcategory_id': _selectedSubcategoryId,
       'name': _nameController.text.trim(),
       'sku': _skuController.text.trim().isNotEmpty
           ? _skuController.text.trim()
-          : 'SKU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+          : 'SKU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}', // Auto SKU generation fallback
       'price': basePrice,
       'base_price': basePrice,
       'discount_price': discountPrice,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/pos_screen.dart';
+import 'screens/store_setup_screen.dart';
 import 'services/api_service.dart';
 import 'services/offline_sync_service.dart';
 import 'services/notification_service.dart';
@@ -40,6 +41,7 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   bool _isLoggedIn = false;
+  bool _isStoreSetupDone = true;
   String _userEmail = '';
   String _storeName = 'POS STORE';
 
@@ -58,6 +60,15 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
         if (userInfo != null) {
           _userEmail = userInfo['email']?.toString() ?? '';
           _storeName = userInfo['store_name']?.toString() ?? 'POS STORE';
+
+          final role = (userInfo['role'] ?? '').toString().toLowerCase();
+          final isStaff = role.contains('cashier') || role.contains('staff') || role.contains('employee');
+
+          if (!isStaff) {
+            _isStoreSetupDone = await _apiService.isStoreSetupCompleted();
+          } else {
+            _isStoreSetupDone = true;
+          }
         }
       }
     } catch (_) {}
@@ -80,6 +91,17 @@ class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
     }
 
     if (_isLoggedIn) {
+      if (!_isStoreSetupDone) {
+        return StoreSetupScreen(
+          userEmail: _userEmail,
+          initialStoreName: (_storeName.isNotEmpty &&
+                  _storeName != 'POS STORE' &&
+                  _storeName != 'Admin Store' &&
+                  _storeName != 'User Store')
+              ? _storeName
+              : '',
+        );
+      }
       return PosScreen(
         userEmail: _userEmail,
         storeName: _storeName,

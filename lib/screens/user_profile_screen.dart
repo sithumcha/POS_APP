@@ -4,7 +4,11 @@ import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bluetooth_printer_dialog.dart';
 import '../widgets/server_status_badge.dart';
+import '../widgets/ui_animation_helper.dart';
 import 'login_screen.dart';
+import 'sales_history_screen.dart';
+import 'store_setup_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userEmail;
@@ -55,12 +59,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _fetchStaffList();
   }
 
+  /// 1. USER PROFILE & STORE BRANDING FETCHER:
+  /// Combines user profile endpoint and CMS store branding endpoint
+  /// to display cashier/owner avatar, active store name, and role permissions.
   Future<void> _fetchUserProfile() async {
     try {
       final data = await _apiService.getUserDetail();
+      final branding = await _apiService.getStoreBranding();
       if (!mounted) return;
       setState(() {
         _userData = {..._userData, ...data};
+        final bStoreName = (branding['store_name'] ?? '').toString().trim();
+        if (bStoreName.isNotEmpty && bStoreName != 'Admin Store' && bStoreName != 'User Store') {
+          _userData['store_name'] = bStoreName;
+        }
+        final logo = (branding['logo_url'] ?? data['logo_url'] ?? data['image'] ?? data['avatar'] ?? '').toString().trim();
+        if (logo.isNotEmpty) {
+          _userData['logo_url'] = logo;
+        }
         _isLoading = false;
       });
     } catch (_) {
@@ -71,6 +87,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
+  /// 2. CASHIER & STAFF LIST FETCHER:
+  /// Retrieves list of secondary cashiers and store operators created under this store owner.
   Future<void> _fetchStaffList() async {
     try {
       final staff = await _apiService.getStaffMembers();
@@ -377,6 +395,161 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  void _pickAndUploadProfileLogo() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Store Logo & Profile Picture',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Upload or change the store logo shown on profile, dashboard & receipts',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFEFF6FF),
+                    child: Icon(Icons.photo_library_rounded, color: Color(0xFF1D4ED8)),
+                  ),
+                  title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('Pick high quality store logo / photo', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickLogoImage(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFECFDF5),
+                    child: Icon(Icons.camera_alt_rounded, color: Color(0xFF047857)),
+                  ),
+                  title: const Text('Take Photo with Camera', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('Snap shop banner or storefront', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickLogoImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFF1F5F9),
+                    child: Icon(Icons.edit_note_rounded, color: Colors.black87),
+                  ),
+                  title: const Text('Edit Personal Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('Change first name and last name', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openEditProfileDialog();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickLogoImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+              SizedBox(width: 10),
+              Text('Uploading store image to server...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      final bytes = await file.readAsBytes();
+      final uploadRes = await _apiService.uploadImage(bytes, file.name);
+
+      if (uploadRes['success'] == true && uploadRes['url'] != null) {
+        final newUrl = uploadRes['url'].toString();
+
+        // 1. Update CMS header
+        await _apiService.updateCmsHeader({'logo_url': newUrl});
+
+        // 2. Update user profile cache and server
+        await _apiService.updateUserProfile(logoUrl: newUrl);
+
+        // 3. Update store branding
+        final b = await _apiService.getStoreBranding();
+        b['logo_url'] = newUrl;
+        await _apiService.saveStoreBranding(b);
+
+        if (!mounted) return;
+        setState(() {
+          _userData['logo_url'] = newUrl;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Store logo updated successfully!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(uploadRes['message'] ?? 'Failed to upload image.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Image upload error: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _openChangePasswordDialog() {
     final currentPassCtrl = TextEditingController();
     final newPassCtrl = TextEditingController();
@@ -462,10 +635,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (confirm == true) {
       await _apiService.clearToken();
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
+      AppNavigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
+        const LoginScreen(),
       );
     }
   }
@@ -528,54 +700,106 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- 1. USER PROFILE HEADER CARD ---
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: Colors.black,
-                              child: Text(
-                                firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: _openEditProfileDialog,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black,
-                                    shape: BoxShape.circle,
+                  // --- 1. USER PROFILE HEADER CARD WITH ENTRANCE ANIMATION ---
+                  FadeSlideEntrance(
+                    duration: const Duration(milliseconds: 350),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withOpacity(0.04),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                        Builder(
+                          builder: (context) {
+                            final String logoUrl = (_userData['logo_url'] ?? '').toString().trim();
+                            return Stack(
+                              children: [
+                                GestureDetector(
+                                  onTap: _pickAndUploadProfileLogo,
+                                  child: Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: const Color(0xFFCBD5E1), width: 2),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.08),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: logoUrl.isNotEmpty
+                                        ? Image.network(
+                                            logoUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => CircleAvatar(
+                                              radius: 40,
+                                              backgroundColor: Colors.black,
+                                              child: Text(
+                                                firstName.isNotEmpty ? firstName[0].toUpperCase() : 'S',
+                                                style: const TextStyle(
+                                                  fontSize: 32,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : CircleAvatar(
+                                            radius: 40,
+                                            backgroundColor: Colors.black,
+                                            child: Text(
+                                              firstName.isNotEmpty ? firstName[0].toUpperCase() : 'S',
+                                              style: const TextStyle(
+                                                fontSize: 32,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
                                   ),
-                                  child: const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
                                 ),
-                              ),
-                            ),
-                          ],
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: _pickAndUploadProfileLogo,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.2),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 14),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
 
@@ -635,6 +859,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ],
                     ),
                   ),
+                  ),
                   const SizedBox(height: 20),
 
                   // --- 2. PERSONAL DETAILS CARD ---
@@ -644,7 +869,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     decoration: _boxDecoration(),
                     child: Column(
                       children: [
-                        _buildDetailTile(Icons.storefront_rounded, 'Store Name', widget.storeName),
+                        _buildDetailTile(
+                          Icons.storefront_rounded,
+                          'Store Name',
+                          (_userData['store_name'] != null && _userData['store_name'].toString().isNotEmpty)
+                              ? _userData['store_name'].toString()
+                              : widget.storeName,
+                        ),
                         const Divider(height: 1),
                         _buildDetailTile(Icons.verified_user_outlined, 'Account Status', 'Active & Verified'),
                         const Divider(height: 1),
@@ -653,6 +884,58 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           title: const Text('Edit Account Info', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                           trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                           onTap: _openEditProfileDialog,
+                        ),
+                        if (!isStaffAccount) ...[
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.storefront_rounded, color: Colors.black, size: 20),
+                            title: const Text('Store Branding & Receipts Setup', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Update logo, store name, address & WhatsApp number', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                            onTap: () {
+                              AppNavigator.push(
+                                context,
+                                StoreSetupScreen(
+                                  userEmail: widget.userEmail,
+                                  initialStoreName: (_userData['store_name'] ?? widget.storeName).toString(),
+                                  isEditing: true,
+                                ),
+                              ).then((_) {
+                                _fetchUserProfile();
+                              });
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // --- SALES & BILLS HISTORY ---
+                  _buildSectionTitle('Sales & Bills Management'),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: _boxDecoration(),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.receipt_long_rounded, color: Colors.black, size: 22),
+                          ),
+                          title: const Text('Past Bills & Sales History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('View billing ledger, receipts, refunds & thermal reprint', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                          onTap: () {
+                            AppNavigator.push(
+                              context,
+                              const SalesHistoryScreen(),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -872,8 +1155,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   BoxDecoration _boxDecoration() {
     return BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       border: Border.all(color: const Color(0xFFE2E8F0)),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFF0F172A).withOpacity(0.03),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
     );
   }
 

@@ -79,35 +79,56 @@ class BluetoothPrinterService {
     required String paymentMethod,
     required double cashTendered,
     required double changeDue,
+    String? storeAddress,
+    String? storePhone,
+    String? thankYouNote,
+    String? returnPolicy,
+    String? customerName,
+    String? customerPhone,
+    int width = 32,
   }) {
     final StringBuffer sb = StringBuffer();
 
-    String center(String text, {int width = 32}) {
-      if (text.length >= width) return text.substring(0, width);
-      final pad = (width - text.length) ~/ 2;
+    String center(String text, {int? customWidth}) {
+      final w = customWidth ?? width;
+      if (text.length >= w) return text.substring(0, w);
+      final pad = (w - text.length) ~/ 2;
       return ' ' * pad + text;
     }
 
-    String twoColumn(String left, String right, {int width = 32}) {
+    String twoColumn(String left, String right, {int? customWidth}) {
+      final w = customWidth ?? width;
       final totalLen = left.length + right.length;
-      if (totalLen >= width) {
-        final maxLeft = width - right.length - 1;
+      if (totalLen >= w) {
+        final maxLeft = w - right.length - 1;
         final truncatedLeft = left.length > maxLeft ? left.substring(0, maxLeft) : left;
-        final spaces = width - truncatedLeft.length - right.length;
+        final spaces = w - truncatedLeft.length - right.length;
         return truncatedLeft + (' ' * (spaces > 0 ? spaces : 1)) + right;
       }
-      final spaces = width - totalLen;
+      final spaces = w - totalLen;
       return left + (' ' * spaces) + right;
     }
 
-    final divider = '-' * 32;
+    final divider = '-' * width;
 
     sb.writeln(center(storeName.toUpperCase()));
+    if (storeAddress != null && storeAddress.isNotEmpty) {
+      sb.writeln(center(storeAddress));
+    }
+    if (storePhone != null && storePhone.isNotEmpty) {
+      sb.writeln(center('Tel: $storePhone'));
+    }
     sb.writeln(center('POS RECEIPT'));
     sb.writeln(divider);
     sb.writeln(twoColumn('Receipt #:', receiptNumber));
     sb.writeln(twoColumn('Date:', '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}'));
     sb.writeln(twoColumn('Cashier:', cashierName));
+    if (customerName != null && customerName.isNotEmpty && customerName != 'Walk-in Customer') {
+      sb.writeln(twoColumn('Customer:', customerName));
+      if (customerPhone != null && customerPhone.isNotEmpty && customerPhone != '0770000000') {
+        sb.writeln(twoColumn('Phone:', customerPhone));
+      }
+    }
     sb.writeln(divider);
     sb.writeln(twoColumn('ITEM', 'QTY x PRICE   TOTAL'));
     sb.writeln(divider);
@@ -137,7 +158,14 @@ class BluetoothPrinterService {
       sb.writeln(twoColumn('Change Due:', 'LKR ${changeDue.toStringAsFixed(2)}'));
     }
     sb.writeln(divider);
-    sb.writeln(center('THANK YOU FOR YOUR PURCHASE!'));
+    if (thankYouNote != null && thankYouNote.isNotEmpty) {
+      sb.writeln(center(thankYouNote));
+    } else {
+      sb.writeln(center('THANK YOU FOR YOUR PURCHASE!'));
+    }
+    if (returnPolicy != null && returnPolicy.isNotEmpty) {
+      sb.writeln(center(returnPolicy));
+    }
     sb.writeln(center('Powered by POS App'));
     sb.writeln('\n\n'); // Feed lines for thermal cutter
 
@@ -156,6 +184,13 @@ class BluetoothPrinterService {
     required String paymentMethod,
     required double cashTendered,
     required double changeDue,
+    String? storeAddress,
+    String? storePhone,
+    String? thankYouNote,
+    String? returnPolicy,
+    String? customerName,
+    String? customerPhone,
+    int width = 32,
   }) async {
     await Future.delayed(const Duration(milliseconds: 1500));
     final text = generateThermalReceiptText(
@@ -170,6 +205,13 @@ class BluetoothPrinterService {
       paymentMethod: paymentMethod,
       cashTendered: cashTendered,
       changeDue: changeDue,
+      storeAddress: storeAddress,
+      storePhone: storePhone,
+      thankYouNote: thankYouNote,
+      returnPolicy: returnPolicy,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      width: width,
     );
 
     if (kDebugMode) {

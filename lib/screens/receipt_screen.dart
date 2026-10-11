@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../widgets/bluetooth_printer_dialog.dart';
+import '../widgets/ui_animation_helper.dart';
 import 'pos_screen.dart';
 
 class ReceiptScreen extends StatefulWidget {
@@ -16,6 +18,8 @@ class ReceiptScreen extends StatefulWidget {
   final double changeDue;
   final String? receiptNumber;
   final DateTime? dateTime;
+  final String customerName;
+  final String customerPhone;
 
   const ReceiptScreen({
     super.key,
@@ -30,6 +34,8 @@ class ReceiptScreen extends StatefulWidget {
     this.changeDue = 0.0,
     this.receiptNumber,
     this.dateTime,
+    this.customerName = 'Walk-in Customer',
+    this.customerPhone = '0770000000',
   });
 
   @override
@@ -38,15 +44,52 @@ class ReceiptScreen extends StatefulWidget {
 
 class _ReceiptScreenState extends State<ReceiptScreen> {
   final BluetoothPrinterService _printerService = BluetoothPrinterService();
+  final ApiService _apiService = ApiService();
   bool _isPrinting = false;
   late final String _invNum;
   late final DateTime _txTime;
+  Map<String, dynamic> _branding = {};
+  Map<String, dynamic> _billingSettings = {};
+  Map<String, dynamic> _hardwareSettings = {};
 
   @override
   void initState() {
     super.initState();
+    // Generate fallback invoice number if not provided by backend order response
     _invNum = widget.receiptNumber ?? 'INV-2026-${(1000 + DateTime.now().millisecond % 9000)}';
     _txTime = widget.dateTime ?? DateTime.now();
+    _loadBranding();
+  }
+
+  /// 1. STORE BRANDING & RECEIPT POLICY FETCHER:
+  /// Loads customized store logo, address, contact numbers, thank you note,
+  /// return policies, and paper size (58mm/80mm) from CMS & store settings.
+  void _loadBranding() async {
+    final b = await _apiService.getStoreBranding();
+    final bill = await _apiService.getBillingSettings();
+    final hw = await _apiService.getHardwareSettings();
+    if (mounted) {
+      setState(() {
+        _branding = b;
+        _billingSettings = bill;
+        _hardwareSettings = hw;
+      });
+    }
+  }
+
+  /// 2. STORE ADDRESS & TELEPHONE COMPOSER:
+  /// Formats store contact lines for thermal receipt header printing.
+  String _getFormattedAddressPhone() {
+    final addr = (_branding['address'] ?? '').toString().trim();
+    final phone = (_branding['phone'] ?? '').toString().trim();
+    if (addr.isNotEmpty && phone.isNotEmpty) {
+      return '$addr\nTel: $phone';
+    } else if (addr.isNotEmpty) {
+      return addr;
+    } else if (phone.isNotEmpty) {
+      return 'Tel: $phone';
+    }
+    return 'Authorized Retail & POS Terminal\nCustomer Care Hotline';
   }
 
   void _openBluetoothSettings() {
@@ -56,9 +99,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
+  /// 3. ESC/POS THERMAL RECEIPT PRINTING LOGIC:
+  /// Verifies active Bluetooth connection to thermal receipt printer.
+  /// Formats line items, tax breakdown, and footer barcode for thermal printing.
   void _handleBluetoothPrint() async {
     if (!_printerService.isConnected) {
-      // Prompt user to connect Bluetooth Printer first
+      // Prompt user to select and pair a Bluetooth printer first
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No Bluetooth printer connected. Select your printer.'),
@@ -73,8 +119,13 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       _isPrinting = true;
     });
 
+    final effectiveStoreName = widget.storeName.isNotEmpty
+        ? widget.storeName
+        : (_branding['store_name'] ?? 'POS Store').toString();
+    final is80mm = (_hardwareSettings['paper_size'] ?? '') == '80mm';
+
     final success = await _printerService.printReceiptData(
-      storeName: widget.storeName,
+      storeName: effectiveStoreName,
       cashierName: widget.cashierName,
       receiptNumber: _invNum,
       dateTime: _txTime,
@@ -85,6 +136,13 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       paymentMethod: widget.paymentMethod,
       cashTendered: widget.cashTendered,
       changeDue: widget.changeDue,
+      storeAddress: (_branding['address'] ?? '').toString(),
+      storePhone: (_branding['phone'] ?? '').toString(),
+      thankYouNote: (_billingSettings['thank_you_message'] ?? '').toString(),
+      returnPolicy: (_billingSettings['return_policy'] ?? '').toString(),
+      customerName: widget.customerName,
+      customerPhone: widget.customerPhone,
+      width: is80mm ? 48 : 32,
     );
 
     if (!mounted) return;
@@ -182,15 +240,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   void _navigateToNewSale() {
-    Navigator.pushAndRemoveUntil(
+    AppNavigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (context) => PosScreen(
-          userEmail: 'cashier@pos.com',
-          storeName: widget.storeName,
-        ),
+      PosScreen(
+        userEmail: 'cashier@pos.com',
+        storeName: widget.storeName,
       ),
-      (route) => false,
     );
   }
 
@@ -251,17 +306,25 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                         const SizedBox(height: 8),
                         // Store Logo & Header
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          width: 56,
+                          height: 56,
                           decoration: const BoxDecoration(
                             color: Colors.black,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
+                          clipBehavior: Clip.antiAlias,
+                          child: (_branding['logo_url'] != null && _branding['logo_url'].toString().isNotEmpty)
+                              ? Image.network(
+                                  _branding['logo_url'].toString(),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 28),
+                                )
+                              : const Icon(Icons.storefront_rounded, color: Colors.white, size: 28),
                         ),
                         const SizedBox(height: 10),
 
                         Text(
-                          widget.storeName.toUpperCase(),
+                          (widget.storeName.isNotEmpty ? widget.storeName : (_branding['store_name'] ?? 'POS STORE')).toString().toUpperCase(),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
@@ -270,10 +333,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
-                          '123 Main Street, Colombo 03, Sri Lanka\nTel: +94 11 234 5678',
+                        Text(
+                          _getFormattedAddressPhone(),
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
+                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
                         ),
                         const SizedBox(height: 16),
 
@@ -286,6 +349,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                         _buildMetaRow('Date & Time:', formattedDate),
                         const SizedBox(height: 4),
                         _buildMetaRow('Cashier:', widget.cashierName),
+                        const SizedBox(height: 4),
+                        _buildMetaRow('Customer:', widget.customerName.isNotEmpty ? widget.customerName : 'Walk-in Customer'),
+                        if (widget.customerPhone.isNotEmpty && widget.customerPhone != '0770000000') ...[
+                          const SizedBox(height: 4),
+                          _buildMetaRow('Customer Tel:', widget.customerPhone),
+                        ],
                         const SizedBox(height: 12),
 
                         _buildDottedDivider(),
@@ -405,10 +474,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                         const SizedBox(height: 16),
 
                         // Footer Note & Barcode Representation
-                        const Text(
-                          'Thank you for shopping with us!\n*** Please come again ***',
+                        Text(
+                          [
+                            (_billingSettings['thank_you_message'] ?? 'Thank you for shopping with us!\n*** Please come again ***').toString().trim(),
+                            if ((_billingSettings['return_policy'] ?? '').toString().trim().isNotEmpty)
+                              (_billingSettings['return_policy']).toString().trim(),
+                          ].where((s) => s.isNotEmpty).join('\n\n'),
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
                         ),
                         const SizedBox(height: 16),
                         BarcodeWidget(code: _invNum),
