@@ -42,3 +42,8 @@ migrate_working_dir/
 
 # Web related
 lib/generated_plugin_registrant.dart
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
