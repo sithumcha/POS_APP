@@ -112,15 +112,17 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
     final double totalPrice = _calculateTotalUnitPrice();
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 580,
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Drag handle & top bar
@@ -416,7 +418,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
 

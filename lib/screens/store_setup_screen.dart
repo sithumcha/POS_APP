@@ -143,6 +143,20 @@ class _StoreSetupScreenState extends State<StoreSetupScreen> {
   }
 
   Future<void> _loadAllInitialSettings() async {
+    final isStaff = await _apiService.isStaffUser();
+    if (isStaff) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Restricted: Only Store Owner can modify store branding & settings.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       if (!widget.isEditing) {
@@ -408,7 +422,6 @@ class _StoreSetupScreenState extends State<StoreSetupScreen> {
     await _apiService.updateCmsHeader({
       'store_name': storeName,
       'title': storeName,
-      'logo_url': logoUrl,
     });
 
     // 3. Update CMS Contact

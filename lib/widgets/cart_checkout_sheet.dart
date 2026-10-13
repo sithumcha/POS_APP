@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../database/app_database.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
@@ -57,11 +58,19 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
   void initState() {
     super.initState();
     _localCart = List<Map<String, dynamic>>.from(widget.cartItems.map((i) => Map<String, dynamic>.from(i)));
+    _customerNameController.addListener(_onCustomerInputChanged);
+    _customerPhoneController.addListener(_onCustomerInputChanged);
     _loadCurrentUserInfo();
+  }
+
+  void _onCustomerInputChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _customerNameController.removeListener(_onCustomerInputChanged);
+    _customerPhoneController.removeListener(_onCustomerInputChanged);
     _cashTenderedController.dispose();
     _discountAmountController.dispose();
     _customerNameController.dispose();
@@ -93,6 +102,15 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
         _currentStoreName = info['store_name'].toString();
       }
     });
+
+    // Also check consolidated branding store name so bills always carry the store brand
+    final branding = await _apiService.getStoreBranding();
+    final brandingName = (branding['store_name'] ?? '').toString().trim();
+    if (mounted && brandingName.isNotEmpty) {
+      setState(() {
+        _currentStoreName = brandingName;
+      });
+    }
   }
 
   double get _subtotal {
@@ -173,7 +191,9 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
     final userInfo = await _apiService.getUserInfo();
     if (!mounted) return;
-    final cashierId = userInfo?['id'] is int ? userInfo!['id'] as int : 14;
+    final cashierId = userInfo?['id'] is int
+        ? userInfo!['id'] as int
+        : (int.tryParse(userInfo?['id']?.toString() ?? '') ?? 14);
     final paymentMethodStr = _selectedPaymentMethod == 0 ? 'cash' : (_selectedPaymentMethod == 1 ? 'card' : 'qr');
 
     final enteredName = _customerNameController.text.trim();
@@ -214,6 +234,26 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
       });
     }
 
+    // Immediately decrement local database stock for sold products
+    final appDb = AppDatabase();
+    for (final item in _localCart) {
+      final pId = int.tryParse((item['id'] ?? item['product_id'] ?? item['productId'])?.toString() ?? '');
+      final qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+      if (pId != null) {
+        try {
+          appDb.getProduct(pId).then((prod) {
+            if (prod != null) {
+              final newStock = (prod.stock - qty).clamp(0, 999999);
+              appDb.updateProductStock(pId, newStock);
+            }
+          });
+        } catch (_) {}
+      }
+    }
+
+    // Notify POS parent screen of completed sale so catalog reloads immediately
+    widget.onOrderCompleted();
+
     // Trigger push notification to Phone Notification Bar & In-app center
     NotificationService().triggerOrderCompletionNotification(context, _grandTotal);
 
@@ -227,26 +267,29 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.92,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          // Drag handle indicator
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 5,
-            decoration: BoxDecoration(
-              color: const Color(0xFFCBD5E1),
-              borderRadius: BorderRadius.circular(10),
-            ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.of(context).size.height * 0.92,
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
+          child: Column(
+            children: [
+              // Drag handle indicator
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
           const SizedBox(height: 8),
 
           // Header
@@ -480,107 +523,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                         ),
                         const SizedBox(height: 20),
 
-                        // --- 2. CUSTOMER DETAILS CARD (OPTIONAL) ---
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.person_outline_rounded, size: 18, color: Colors.black),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Customer Details',
-                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.black),
-                                      ),
-                                    ],
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFECFDF5),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: const Color(0xFFA7F3D0)),
-                                    ),
-                                    child: const Text(
-                                      'Optional • Auto Walk-in',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  // Customer Name Field
-                                  Expanded(
-                                    flex: 5,
-                                    child: TextField(
-                                      controller: _customerNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                      decoration: InputDecoration(
-                                        isDense: true,
-                                        filled: true,
-                                        fillColor: const Color(0xFFF8FAFC),
-                                        hintText: 'Walk-in Customer (Default)',
-                                        hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                        prefixIcon: const Icon(Icons.badge_outlined, size: 16, color: AppColors.textSecondary),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                          borderSide: const BorderSide(color: Colors.black, width: 1.5),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Customer Phone Field with Country Code Picker
-                                  Expanded(
-                                    flex: 6,
-                                    child: PhoneInputWithCountryCode(
-                                      hintText: 'Phone (077...)',
-                                      controller: _customerPhoneController,
-                                      selectedCountryCode: _customerPhoneCountryCode,
-                                      onCountryChanged: (code) => setState(() => _customerPhoneCountryCode = code),
-                                      borderRadius: 10,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Leave empty to automatically bill as "Walk-in Customer" (0770000000).',
-                                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-                              ),
-                            ],
-                          ),
-                        ),
+                        // --- 2. CUSTOMER DETAILS CARD (PROMINENT & CREATIVE) ---
+                        _buildCustomerDetailsSection(),
                         const SizedBox(height: 20),
 
                         // --- 3. BILLING SUMMARY ---
@@ -1109,7 +1053,9 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildPaymentTab(int index, String label, IconData icon) {
@@ -1303,23 +1249,21 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                 Navigator.pop(context); // close dialog
                 Navigator.pop(context); // close checkout sheet
 
-                Navigator.push(
+                AppNavigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => ReceiptScreen(
-                      storeName: _currentStoreName,
-                      cashierName: _currentCashierName,
-                      customerName: _finalCustomerName,
-                      customerPhone: _finalCustomerPhone,
-                      orderItems: _localCart,
-                      subtotal: _subtotal,
-                      discountAmount: _discountAmount,
-                      grandTotal: _grandTotal,
-                      paymentMethod: paymentMethodName,
-                      cashTendered: _cashTendered,
-                      changeDue: _changeDue >= 0 ? _changeDue : 0.0,
-                      receiptNumber: _placedReceiptNumber,
-                    ),
+                  ReceiptScreen(
+                    storeName: _currentStoreName,
+                    cashierName: _currentCashierName,
+                    customerName: _finalCustomerName,
+                    customerPhone: _finalCustomerPhone,
+                    orderItems: _localCart,
+                    subtotal: _subtotal,
+                    discountAmount: _discountAmount,
+                    grandTotal: _grandTotal,
+                    paymentMethod: paymentMethodName,
+                    cashTendered: _cashTendered,
+                    changeDue: _changeDue >= 0 ? _changeDue : 0.0,
+                    receiptNumber: _placedReceiptNumber,
                   ),
                 );
               },
@@ -1334,6 +1278,430 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// High-visibility, prominent, and interactive Customer Details section.
+  /// Clearly indicates whether the sale is assigned to a Walk-in or custom customer,
+  /// with quick presets, responsive layout, clear buttons, and live receipt summary.
+  Widget _buildCustomerDetailsSection() {
+    final enteredName = _customerNameController.text.trim();
+    final enteredPhone = _customerPhoneController.text.trim();
+    final bool hasCustomCustomer = enteredName.isNotEmpty || enteredPhone.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasCustomCustomer ? const Color(0xFF10B981) : const Color(0xFFCBD5E1),
+          width: hasCustomCustomer ? 1.6 : 1.2,
+        ),
+        boxShadow: [
+          if (hasCustomCustomer)
+            BoxShadow(
+              color: const Color(0xFF10B981).withOpacity(0.12),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Prominent Header Bar with Status Chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: hasCustomCustomer ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+              border: Border(
+                bottom: BorderSide(
+                  color: hasCustomCustomer ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                  width: 1.0,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Icon Avatar Badge
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: hasCustomCustomer ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasCustomCustomer ? Icons.person_rounded : Icons.person_outline_rounded,
+                    size: 20,
+                    color: hasCustomCustomer ? Colors.white : const Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Title & Subtitle Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Customer Details',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: hasCustomCustomer ? const Color(0xFFD1FAE5) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: hasCustomCustomer ? const Color(0xFF6EE7B7) : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Text(
+                              hasCustomCustomer ? 'CUSTOM' : 'OPTIONAL',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: hasCustomCustomer ? const Color(0xFF065F46) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasCustomCustomer
+                            ? 'Customer info will be printed on receipt'
+                            : 'Auto-assigned to Walk-in Customer (0770000000)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: hasCustomCustomer ? const Color(0xFF059669) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Quick Clear or Reset Button
+                if (hasCustomCustomer)
+                  InkWell(
+                    onTap: () {
+                      _customerNameController.clear();
+                      _customerPhoneController.clear();
+                      setState(() {
+                        _customerPhoneCountryCode = '+94';
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.close_rounded, size: 14, color: Color(0xFF64748B)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Reset Walk-in',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, size: 13, color: Color(0xFF059669)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Walk-in Ready',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF065F46),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // 2. Body with Quick Presets & Responsive Input Fields
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Quick Preset Chips
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        _customerNameController.clear();
+                        _customerPhoneController.clear();
+                        setState(() {
+                          _customerPhoneCountryCode = '+94';
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: !hasCustomCustomer ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: !hasCustomCustomer ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.directions_walk_rounded,
+                              size: 14,
+                              color: !hasCustomCustomer ? Colors.white : const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Standard Walk-in',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: !hasCustomCustomer ? Colors.white : const Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        if (_customerNameController.text.trim().isEmpty) {
+                          _customerNameController.text = 'VIP Customer';
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star_outline_rounded, size: 14, color: Color(0xFFF59E0B)),
+                            SizedBox(width: 5),
+                            Text(
+                              'VIP Tag',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Responsive Fields: 2 columns on wide screens, stacked cleanly on mobile
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isWide = constraints.maxWidth > 540;
+
+                    final nameField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.badge_outlined, size: 14, color: Color(0xFF059669)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Customer Full Name',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              ' (Optional)',
+                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _customerNameController,
+                          textCapitalization: TextCapitalization.words,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0F172A),
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            hintText: 'e.g. Kasun Perera / Walk-in',
+                            hintStyle: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
+                            prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFF64748B)),
+                            suffixIcon: _customerNameController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.cancel_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                    onPressed: () => _customerNameController.clear(),
+                                  )
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+
+                    final phoneField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.phone_iphone_rounded, size: 14, color: Color(0xFF059669)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Mobile / WhatsApp Number',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              ' (Optional)',
+                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        PhoneInputWithCountryCode(
+                          hintText: '077 123 4567',
+                          controller: _customerPhoneController,
+                          selectedCountryCode: _customerPhoneCountryCode,
+                          onCountryChanged: (code) => setState(() => _customerPhoneCountryCode = code),
+                          borderRadius: 12,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        ),
+                      ],
+                    );
+
+                    if (isWide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: nameField),
+                          const SizedBox(width: 12),
+                          Expanded(flex: 6, child: phoneField),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        children: [
+                          nameField,
+                          const SizedBox(height: 12),
+                          phoneField,
+                        ],
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // 3. Live Customer Summary Pill & Receipt Tag
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: hasCustomCustomer ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: hasCustomCustomer ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        hasCustomCustomer ? Icons.receipt_long_rounded : Icons.info_outline_rounded,
+                        size: 16,
+                        color: hasCustomCustomer ? const Color(0xFF059669) : const Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          hasCustomCustomer
+                              ? 'Bill will be issued to: ${enteredName.isNotEmpty ? enteredName : "Walk-in"} • ${enteredPhone.isNotEmpty ? "$_customerPhoneCountryCode $enteredPhone" : "Default Phone"}'
+                              : 'Leave blank to automatically bill as "Walk-in Customer" (0770000000).',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: hasCustomCustomer ? FontWeight.w700 : FontWeight.w500,
+                            color: hasCustomCustomer ? const Color(0xFF065F46) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

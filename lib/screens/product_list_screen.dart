@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/responsive.dart';
 import '../widgets/currency_text.dart';
 import '../widgets/product_image_widget.dart';
 import '../widgets/shimmer_loading.dart';
@@ -21,6 +22,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   List<dynamic> _products = [];
   bool _isLoading = true;
+  bool _isStaff = false;
 
   String _searchQuery = '';
   String _selectedStockFilter = 'All'; // 'All', 'Low Stock', 'In Stock'
@@ -46,10 +48,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
     });
 
     try {
-      final data = await _apiService.getProducts(forceRefresh: forceRefresh);
+      final results = await Future.wait([
+        _apiService.getProducts(forceRefresh: forceRefresh),
+        _apiService.isStaffUser(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _products = data;
+        _products = results[0] as List<dynamic>;
+        _isStaff = results[1] as bool;
         _isLoading = false;
       });
     } catch (_) {
@@ -64,6 +70,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
   /// Displays a safety confirmation dialog before sending the delete request to the backend.
   /// Removes the deleted item locally from the list on success for instant UI feedback.
   Future<void> _deleteProduct(int productId, String productName) async {
+    if (_isStaff) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Restricted: Only Admin / Store Owner can delete products.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -116,6 +133,17 @@ class _ProductListScreenState extends State<ProductListScreen> {
   /// Navigates to ProductFormScreen. If a product was saved or modified,
   /// re-fetches the latest catalog upon returning to this screen.
   Future<void> _openProductFormScreen({Map<String, dynamic>? initialProduct}) async {
+    if (_isStaff) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Restricted: Only Admin / Store Owner can add or modify products.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final result = await AppNavigator.push<bool>(
       context,
       ProductFormScreen(initialProduct: initialProduct),
@@ -164,14 +192,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
     required Widget valueWidget,
     required String subtitle,
   }) {
-    return Container(
+    return HoverScaleCard(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: AppColors.softShadow,
-      ),
+      borderRadius: BorderRadius.circular(16),
+      scaleFactor: 1.03,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -235,13 +259,36 @@ class _ProductListScreenState extends State<ProductListScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Inventory & Catalog',
-          style: GoogleFonts.plusJakartaSans(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-          ),
+        title: Row(
+          children: [
+            Text(
+              'Inventory & Catalog',
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
+            ),
+            if (_isStaff) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: const Text(
+                  'Staff View',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1D4ED8),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         centerTitle: false,
         actions: [
@@ -251,7 +298,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: ResponsiveCenter(
+        maxWidth: 1000,
+        child: Column(
         children: [
           // --- 1. METRIC OVERVIEW CARDS (Item 5) ---
           Container(
@@ -571,27 +620,28 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                     ),
                                   ),
 
-                                  // Action Buttons (Edit & Delete)
-                                  Row(
-                                    children: [
-                                      AnimatedTapButton(
-                                        scaleDown: 0.88,
-                                        onTap: () => _openProductFormScreen(initialProduct: item),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(6.0),
-                                          child: Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
+                                  // Action Buttons (Edit & Delete) - Only for Admin / Owner
+                                  if (!_isStaff)
+                                    Row(
+                                      children: [
+                                        AnimatedTapButton(
+                                          scaleDown: 0.88,
+                                          onTap: () => _openProductFormScreen(initialProduct: item),
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(6.0),
+                                            child: Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
+                                          ),
                                         ),
-                                      ),
-                                      AnimatedTapButton(
-                                        scaleDown: 0.88,
-                                        onTap: () => _deleteProduct(id, name),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(6.0),
-                                          child: Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                                        AnimatedTapButton(
+                                          scaleDown: 0.88,
+                                          onTap: () => _deleteProduct(id, name),
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(6.0),
+                                            child: Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
                                 ],
                               ),
                             ),
@@ -601,19 +651,22 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ),
         ],
       ),
+    ),
 
-      // --- 4. FLOATING ACTION BUTTON (FAB +) ---
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openProductFormScreen(),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded),
-        label: Text(
-          'Add Product',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-        ),
-      ),
+      // --- 4. FLOATING ACTION BUTTON (FAB +) - Only for Admin / Owner ---
+      floatingActionButton: _isStaff
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _openProductFormScreen(),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(
+                'Add Product',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+              ),
+            ),
     );
   }
 }

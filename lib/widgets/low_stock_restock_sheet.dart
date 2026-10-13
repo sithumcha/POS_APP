@@ -90,15 +90,17 @@ class _LowStockRestockSheetState extends State<LowStockRestockSheet> {
       return true;
     }).toList();
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: MediaQuery.of(context).size.height * 0.90,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
         children: [
           // Drag handle
           const SizedBox(height: 12),
@@ -301,7 +303,8 @@ class _LowStockRestockSheetState extends State<LowStockRestockSheet> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildFilterChip(String label, int index) {

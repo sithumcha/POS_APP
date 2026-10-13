@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/responsive.dart';
 
 class ProductFormScreen extends StatefulWidget {
   final Map<String, dynamic>? initialProduct;
@@ -506,7 +507,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
-        child: Form(
+        child: ResponsiveCenter(
+          maxWidth: 680,
+          child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -939,7 +942,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSectionHeader(String title) {

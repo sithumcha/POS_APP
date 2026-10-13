@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/server_status_badge.dart';
@@ -133,7 +134,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           final String userStoreName = (userDetail['store_name'] ?? '').toString().trim();
           final String effectiveStoreName = brandingStoreName.isNotEmpty
               ? brandingStoreName
-              : (userStoreName.isNotEmpty ? userStoreName : '$displayName Store');
+              : (userStoreName.isNotEmpty
+                  ? userStoreName
+                  : (isStaff ? 'QUICKE POS Store' : '$displayName Store'));
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -222,6 +225,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // Initialize store onboarding status to false for new account
           await _apiService.setStoreSetupCompleted(false);
           await _apiService.clearSetupDraft();
+          await _apiService.saveStoreBranding({
+            'store_name': '$firstName Store',
+            'logo_url': '',
+            'address': '',
+            'phone': '',
+            'email': email,
+            'whatsapp': '',
+          });
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -282,66 +293,63 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA), // Modern canvas background (#f5f7fa)
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Stack(
         children: [
           // =====================================================================
-          // --- AMBIENT BACKGROUND GLOW EFFECTS (Emerald, Teal, Slate blurs) ---
+          // --- AMBIENT BACKGROUND GLOW EFFECTS (Emerald, Indigo, Slate) ---
           // =====================================================================
-          // 1. Top-left soft Emerald radial glow
           Positioned(
-            top: -96,
-            left: -80,
+            top: -120,
+            left: -100,
             child: IgnorePointer(
               child: Container(
-                width: 320,
-                height: 320,
+                width: 380,
+                height: 380,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFA7F3D0).withOpacity(0.40),
-                      const Color(0xFFA7F3D0).withOpacity(0.0),
+                      const Color(0xFF10B981).withOpacity(0.18),
+                      const Color(0xFF10B981).withOpacity(0.0),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-          // 2. Mid-right soft Teal radial glow
           Positioned(
-            top: screenSize.height * 0.33,
-            right: -96,
+            top: screenSize.height * 0.28,
+            right: -120,
             child: IgnorePointer(
               child: Container(
-                width: 320,
-                height: 320,
+                width: 360,
+                height: 360,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFCCFBF1).withOpacity(0.50),
-                      const Color(0xFFCCFBF1).withOpacity(0.0),
+                      const Color(0xFF6366F1).withOpacity(0.14),
+                      const Color(0xFF6366F1).withOpacity(0.0),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-          // 3. Bottom-center soft Slate radial glow
           Positioned(
-            bottom: -96,
-            left: screenSize.width * 0.25,
+            bottom: -100,
+            left: screenSize.width * 0.2,
             child: IgnorePointer(
               child: Container(
-                width: 384,
-                height: 384,
+                width: 420,
+                height: 420,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFE2E8F0).withOpacity(0.50),
-                      const Color(0xFFE2E8F0).withOpacity(0.0),
+                      const Color(0xFF06B6D4).withOpacity(0.12),
+                      const Color(0xFF06B6D4).withOpacity(0.0),
                     ],
                   ),
                 ),
@@ -356,9 +364,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: Center(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
+                  constraints: const BoxConstraints(maxWidth: 440),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -370,38 +378,36 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         offset: const Offset(0.0, -0.06),
                         child: Column(
                           children: [
-                            // Floating vector logo (QuickeApp signature speech bubble with lightning bolt)
                             AnimatedBuilder(
                               animation: _floatAnimation,
                               builder: (context, child) => Transform.translate(
                                 offset: Offset(0, _floatAnimation.value),
                                 child: child,
                               ),
-                              child: const QuickeLogoBubble(size: 80),
+                              child: const QuickeLogoBubble(size: 82),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 14),
 
-                            // Brand name: "Quicke" in Slate-900, "App" in Emerald-500
                             RichText(
                               textAlign: TextAlign.center,
-                              text: const TextSpan(
+                              text: TextSpan(
                                 children: [
                                   TextSpan(
                                     text: 'Quicke',
-                                    style: TextStyle(
-                                      fontSize: 32,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 34,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: -1.0,
-                                      color: Color(0xFF0F172A),
+                                      color: const Color(0xFF0F172A),
                                     ),
                                   ),
                                   TextSpan(
                                     text: 'App',
-                                    style: TextStyle(
-                                      fontSize: 32,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 34,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: -1.0,
-                                      color: Color(0xFF10B981),
+                                      color: const Color(0xFF10B981),
                                     ),
                                   ),
                                 ],
@@ -409,27 +415,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             ),
                             const SizedBox(height: 4),
 
-                            // Tagline in tracking uppercase
-                            const Text(
+                            Text(
                               'SELL SMARTER, GROW FASTER.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.2,
-                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.5,
+                                color: const Color(0xFF64748B),
                               ),
                             ),
                             const SizedBox(height: 14),
 
-                            // Server heartbeat & pending offline queue sync status badge
                             const Center(
                               child: ServerStatusBadge(),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 22),
 
                       // =========================================================
                       // --- 2. MAIN INTERACTIVE CARD CONTAINER ---
@@ -438,25 +442,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         delay: const Duration(milliseconds: 140),
                         offset: const Offset(0.0, 0.08),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 26),
+                          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.96),
+                            color: Colors.white.withOpacity(0.97),
                             borderRadius: BorderRadius.circular(28),
                             border: Border.all(
-                              color: const Color(0xFFE2E8F0).withOpacity(0.85),
+                              color: const Color(0xFFE2E8F0),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF0F172A).withOpacity(0.08),
-                                blurRadius: 45,
-                                offset: const Offset(0, 20),
-                                spreadRadius: -15,
+                                color: const Color(0xFF0F172A).withOpacity(0.06),
+                                blurRadius: 36,
+                                offset: const Offset(0, 16),
+                                spreadRadius: -8,
                               ),
                               BoxShadow(
-                                color: const Color(0xFF0F172A).withOpacity(0.04),
-                                blurRadius: 2,
-                                offset: const Offset(0, 1),
+                                color: const Color(0xFF0F172A).withOpacity(0.02),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
                               ),
                             ],
                           ),
@@ -465,21 +469,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // =====================================================
                                 // --- SEGMENTED SWITCHER CONTROL (Sign In / Register) ---
-                                // =====================================================
                                 Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9), // Slate-100 background
-                                    borderRadius: BorderRadius.circular(14),
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       final halfWidth = (constraints.maxWidth) / 2;
                                       return Stack(
                                         children: [
-                                          // Sliding active black pill indicator
                                           AnimatedPositioned(
                                             duration: const Duration(milliseconds: 260),
                                             curve: Curves.easeOutCubic,
@@ -489,11 +490,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                             width: halfWidth,
                                             child: Container(
                                               decoration: BoxDecoration(
-                                                color: Colors.black,
-                                                borderRadius: BorderRadius.circular(10),
+                                                gradient: AppColors.primaryGradient,
+                                                borderRadius: BorderRadius.circular(12),
                                                 boxShadow: [
                                                   BoxShadow(
-                                                    color: Colors.black.withOpacity(0.25),
+                                                    color: Colors.black.withOpacity(0.2),
                                                     blurRadius: 8,
                                                     offset: const Offset(0, 2),
                                                   ),
@@ -503,7 +504,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                           ),
                                           Row(
                                             children: [
-                                              // Sign In Tab Trigger
                                               Expanded(
                                                 child: GestureDetector(
                                                   behavior: HitTestBehavior.opaque,
@@ -511,21 +511,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                                   child: Container(
                                                     padding: const EdgeInsets.symmetric(vertical: 10),
                                                     alignment: Alignment.center,
-                                                    child: AnimatedDefaultTextStyle(
-                                                      duration: const Duration(milliseconds: 200),
-                                                      style: TextStyle(
+                                                    child: Text(
+                                                      'Sign In',
+                                                      style: GoogleFonts.plusJakartaSans(
                                                         fontSize: 13.5,
                                                         fontWeight: FontWeight.w700,
                                                         color: _selectedTabMode == 0
                                                             ? Colors.white
                                                             : const Color(0xFF475569),
                                                       ),
-                                                      child: const Text('Sign In'),
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                              // Register Tab Trigger
                                               Expanded(
                                                 child: GestureDetector(
                                                   behavior: HitTestBehavior.opaque,
@@ -533,16 +531,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                                   child: Container(
                                                     padding: const EdgeInsets.symmetric(vertical: 10),
                                                     alignment: Alignment.center,
-                                                    child: AnimatedDefaultTextStyle(
-                                                      duration: const Duration(milliseconds: 200),
-                                                      style: TextStyle(
+                                                    child: Text(
+                                                      'Register Store',
+                                                      style: GoogleFonts.plusJakartaSans(
                                                         fontSize: 13.5,
                                                         fontWeight: FontWeight.w700,
                                                         color: _selectedTabMode == 1
                                                             ? Colors.white
                                                             : const Color(0xFF475569),
                                                       ),
-                                                      child: const Text('Register'),
                                                     ),
                                                   ),
                                                 ),
@@ -554,33 +551,29 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 18),
 
-                                // =====================================================
-                                // --- INPUT FIELDS SECTION (Smooth AnimatedSize) ---
-                                // =====================================================
+                                // --- INPUT FIELDS SECTION ---
                                 AnimatedSize(
                                   duration: const Duration(milliseconds: 240),
                                   curve: Curves.easeInOutCubic,
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      // First Name & Last Name (visible only during Register mode)
                                       if (_selectedTabMode == 1) ...[
                                         Row(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            // First Name
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  const Text(
+                                                  Text(
                                                     'First Name',
-                                                    style: TextStyle(
+                                                    style: GoogleFonts.plusJakartaSans(
                                                       fontSize: 12,
                                                       fontWeight: FontWeight.w700,
-                                                      color: Color(0xFF1E293B),
+                                                      color: const Color(0xFF1E293B),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 6),
@@ -588,7 +581,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                                     controller: _firstNameController,
                                                     textCapitalization: TextCapitalization.words,
                                                     enabled: !_isLoading,
-                                                    style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                                                    style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF0F172A)),
                                                     decoration: _inputDecoration(
                                                       hint: 'John',
                                                       prefixIcon: Icons.person_outline,
@@ -602,17 +595,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                               ),
                                             ),
                                             const SizedBox(width: 10),
-                                            // Last Name
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  const Text(
+                                                  Text(
                                                     'Last Name',
-                                                    style: TextStyle(
+                                                    style: GoogleFonts.plusJakartaSans(
                                                       fontSize: 12,
                                                       fontWeight: FontWeight.w700,
-                                                      color: Color(0xFF1E293B),
+                                                      color: const Color(0xFF1E293B),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 6),
@@ -620,7 +612,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                                     controller: _lastNameController,
                                                     textCapitalization: TextCapitalization.words,
                                                     enabled: !_isLoading,
-                                                    style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                                                    style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF0F172A)),
                                                     decoration: _inputDecoration(
                                                       hint: 'Doe',
                                                       prefixIcon: Icons.badge_outlined,
@@ -638,13 +630,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                         const SizedBox(height: 14),
                                       ],
 
-                                      // Email Address Input
-                                      const Text(
+                                      Text(
                                         'Email Address',
-                                        style: TextStyle(
+                                        style: GoogleFonts.plusJakartaSans(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF1E293B),
+                                          color: const Color(0xFF1E293B),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -652,9 +643,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                         controller: _emailController,
                                         keyboardType: TextInputType.emailAddress,
                                         enabled: !_isLoading,
-                                        style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 14, color: const Color(0xFF0F172A)),
                                         decoration: _inputDecoration(
-                                          hint: 'cashier@pos.com',
+                                          hint: 'name@store.com',
                                           prefixIcon: Icons.alternate_email_rounded,
                                         ),
                                         validator: (val) {
@@ -669,13 +660,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       ),
                                       const SizedBox(height: 14),
 
-                                      // Password Input with obscure toggle icon
-                                      const Text(
+                                      Text(
                                         'Password',
-                                        style: TextStyle(
+                                        style: GoogleFonts.plusJakartaSans(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF1E293B),
+                                          color: const Color(0xFF1E293B),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -683,10 +673,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                         controller: _passwordController,
                                         obscureText: _obscurePassword,
                                         enabled: !_isLoading,
-                                        style: const TextStyle(
+                                        style: GoogleFonts.plusJakartaSans(
                                           fontSize: 14,
                                           letterSpacing: 2.0,
-                                          color: Color(0xFF0F172A),
+                                          color: const Color(0xFF0F172A),
                                         ),
                                         decoration: _inputDecoration(
                                           hint: '••••••••',
@@ -705,7 +695,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                         onFieldSubmitted: (_) => _handleSubmit(),
                                       ),
 
-                                      // Register Mode Terms & Compliance Checkbox
                                       if (_selectedTabMode == 1) ...[
                                         const SizedBox(height: 14),
                                         InkWell(
@@ -728,13 +717,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              const Expanded(
+                                              Expanded(
                                                 child: Text(
-                                                  'I agree to POS Operator Security Policy and register this device for authorized transactions.',
-                                                  style: TextStyle(
+                                                  'I agree to POS Operator Security Policy and register this terminal for authorized sales.',
+                                                  style: GoogleFonts.plusJakartaSans(
                                                     fontSize: 11,
                                                     height: 1.35,
-                                                    color: Color(0xFF64748B),
+                                                    color: const Color(0xFF64748B),
                                                   ),
                                                 ),
                                               ),
@@ -747,63 +736,72 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 ),
                                 const SizedBox(height: 22),
 
-                                // =====================================================
-                                // --- SUBMIT ACTION BUTTON (Sign In / Register) ---
-                                // =====================================================
+                                // --- SUBMIT ACTION BUTTON ---
                                 AnimatedTapButton(
                                   scaleDown: 0.98,
-                                  child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _handleSubmit,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.black,
-                                      foregroundColor: Colors.white,
-                                      elevation: 3,
-                                      shadowColor: Colors.black.withOpacity(0.35),
-                                      minimumSize: const Size.fromHeight(50),
-                                      shape: RoundedRectangleBorder(
+                                  child: Container(
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      gradient: AppColors.primaryGradient,
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF0F172A).withOpacity(0.3),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
                                         borderRadius: BorderRadius.circular(14),
+                                        onTap: _isLoading ? null : _handleSubmit,
+                                        child: Center(
+                                          child: _isLoading
+                                              ? const SizedBox(
+                                                  height: 20,
+                                                  width: 20,
+                                                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                                )
+                                              : Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      _selectedTabMode == 0 ? 'Sign In to POS' : 'Create Account',
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    const Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
+                                                  ],
+                                                ),
+                                        ),
                                       ),
                                     ),
-                                    child: _isLoading
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                          )
-                                        : Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                _selectedTabMode == 0 ? 'Sign In to POS' : 'Create Account',
-                                                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              const Icon(Icons.arrow_forward_rounded, size: 18),
-                                            ],
-                                          ),
                                   ),
                                 ),
 
-                                // =====================================================
-                                // --- SECURITY BADGE FOOTER INSIDE CARD ---
-                                // =====================================================
                                 const SizedBox(height: 18),
                                 Container(
                                   padding: const EdgeInsets.only(top: 14),
                                   decoration: const BoxDecoration(
                                     border: Border(top: BorderSide(color: Color(0xFFF1F5F9), width: 1.0)),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.lock_outline_rounded, size: 13.5, color: Color(0xFF94A3B8)),
-                                      SizedBox(width: 6),
+                                      const Icon(Icons.lock_outline_rounded, size: 13.5, color: Color(0xFF94A3B8)),
+                                      const SizedBox(width: 6),
                                       Text(
                                         'Secured with JWT & Encrypted Local Storage',
-                                        style: TextStyle(
+                                        style: GoogleFonts.plusJakartaSans(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
-                                          color: Color(0xFF94A3B8),
+                                          color: const Color(0xFF94A3B8),
                                         ),
                                       ),
                                     ],
@@ -816,16 +814,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       ),
                       const SizedBox(height: 16),
 
-                      // =========================================================
-                      // --- PLATFORM & APP VERSIONING FOOTER ---
-                      // =========================================================
-                      const Text(
-                        'QuickeApp Terminal Edition • v4.2.0 (iOS Certified)',
+                      Text(
+                        'QuickeApp Terminal Edition • v4.2.0 (Fintech Certified)',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF94A3B8),
+                          color: const Color(0xFF94A3B8),
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -841,7 +836,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  /// Helper generating uniform rounded input field decoration matching the modern design system.
   InputDecoration _inputDecoration({
     required String hint,
     required IconData prefixIcon,
@@ -851,7 +845,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       filled: true,
       fillColor: Colors.white,
       hintText: hint,
-      hintStyle: const TextStyle(fontSize: 13.5, color: Color(0xFF94A3B8)),
+      hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF94A3B8)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       prefixIcon: Icon(prefixIcon, size: 19, color: const Color(0xFF94A3B8)),
       suffixIcon: suffixIcon,

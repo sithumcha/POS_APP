@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../theme/responsive.dart';
 import '../services/api_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../widgets/bluetooth_printer_dialog.dart';
@@ -32,10 +33,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   double _avgBillValue = 0.0;
   int _paidBills = 0;
   int _cancelledBills = 0;
-  bool _isLoadingStats = false;
 
   dynamic _currentUserId = 1;
+  String _currentUserName = '';
+  String _currentUserEmail = '';
   bool _isAdmin = false;
+  String _selectedCashierFilter = 'All Staff';
 
   @override
   void initState() {
@@ -49,19 +52,81 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     super.dispose();
   }
 
+  /// Extracts structured Cashier info from either top-level fields or encoded notes JSON
+  Map<String, dynamic> _getCashierInfo(Map<String, dynamic> order) {
+    // 1. Direct fields
+    if (order['cashier_name'] != null && order['cashier_name'].toString().isNotEmpty) {
+      return {
+        'id': order['cashier_id'] ?? order['cashierId'],
+        'name': order['cashier_name'].toString().trim(),
+        'role': (order['role'] ?? 'staff').toString(),
+        'email': (order['cashier_email'] ?? order['email'] ?? '').toString().trim(),
+      };
+    }
+
+    // 2. Parsed from notes JSON metadata
+    final notes = order['notes'];
+    if (notes != null && notes.toString().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(notes.toString());
+        if (decoded is Map<String, dynamic>) {
+          final cName = (decoded['cashier_name'] ?? decoded['cashierName'] ?? '').toString().trim();
+          if (cName.isNotEmpty) {
+            return {
+              'id': decoded['cashier_id'] ?? decoded['cashierId'],
+              'name': cName,
+              'role': (decoded['role'] ?? 'staff').toString(),
+              'email': (decoded['cashier_email'] ?? decoded['email'] ?? '').toString().trim(),
+            };
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback: Store Admin / Owner
+    return {
+      'id': order['user_id'] ?? 1,
+      'name': 'Store Admin',
+      'role': 'admin',
+      'email': '',
+    };
+  }
+
+  /// Available cashier names across current orders (For Admin filtering)
+  List<String> get _availableCashiers {
+    final names = <String>{'All Staff'};
+    for (var o in _orders) {
+      final map = o is Map<String, dynamic> ? o : Map<String, dynamic>.from(o as Map);
+      final cashier = _getCashierInfo(map);
+      final name = (cashier['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) {
+        names.add(name);
+      }
+    }
+    return names.toList();
+  }
+
   /// 1. INITIALIZATION & ROLE DETECTION:
-  /// Identifies current user role (Owner/Admin vs Cashier) to toggle deletion/refund privileges.
-  /// Simultaneously initiates orders and revenue statistics fetching.
+  /// Identifies current user role (Owner/Admin vs Staff Member).
+  /// Cashier only sees their own bills, while Owner sees all staff bills.
   Future<void> _loadInitialData() async {
     final user = await _apiService.getUserInfo();
+    final isStaff = await _apiService.isStaffUser();
+    _isAdmin = !isStaff;
+
     if (user != null) {
       if (user['id'] != null) {
         _currentUserId = user['id'];
       }
-      final rawType = user['user_type'];
-      final type = int.tryParse(rawType?.toString() ?? '');
-      _isAdmin = type == 1 || type == 2 || user['is_owner'] == true || user['role']?.toString().toLowerCase() == 'admin';
+      _currentUserEmail = (user['email'] ?? '').toString().toLowerCase().trim();
+      final firstName = (user['first_name'] ?? '').toString().trim();
+      final lastName = (user['last_name'] ?? '').toString().trim();
+      _currentUserName = '$firstName $lastName'.trim();
+      if (_currentUserName.isEmpty) {
+        _currentUserName = (user['name'] ?? user['email'] ?? 'Staff').toString();
+      }
     }
+
     await Future.wait([
       _fetchOrders(),
       _fetchStats(),
@@ -79,28 +144,31 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   /// 3. KPI REVENUE STATS FETCHING:
-  /// Calls getOrderStats API to populate real-time dashboards (total revenue, bills count, average ticket).
-  /// Falls back to local computation if backend endpoint is unavailable.
+  /// For Admin: Retrieves full store statistics from getOrderStats API.
+  /// For Staff: Computes strictly based on this staff member's drawer/shift totals.
   Future<void> _fetchStats() async {
     if (!mounted) return;
-    setState(() => _isLoadingStats = true);
+
+    if (!_isAdmin) {
+      // Staff only sees their own shift collections
+      _computeStatsLocally();
+      return;
+    }
+
     final dateStr = _getDateQuery();
     final res = await _apiService.getOrderStats(date: dateStr);
     if (!mounted) return;
 
-    if (res['success'] == true) {
+    if (res['success'] == true && _selectedCashierFilter == 'All Staff') {
       setState(() {
         _totalRevenue = (res['total_revenue'] as num?)?.toDouble() ?? 0.0;
         _totalBills = (res['total_bills'] as num?)?.toInt() ?? 0;
         _avgBillValue = (res['avg_bill_value'] as num?)?.toDouble() ?? 0.0;
         _paidBills = (res['paid_bills'] as num?)?.toInt() ?? 0;
         _cancelledBills = (res['cancelled_bills'] as num?)?.toInt() ?? 0;
-        _isLoadingStats = false;
       });
     } else {
-      // Calculate locally from fetched orders if API stats are not yet provided by backend
       _computeStatsLocally();
-      setState(() => _isLoadingStats = false);
     }
   }
 
@@ -109,7 +177,34 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     int paid = 0;
     int cancelled = 0;
 
-    for (var o in _orders) {
+    final targetOrders = _orders.where((o) {
+      final map = o is Map<String, dynamic> ? o : Map<String, dynamic>.from(o as Map);
+      if (!_isAdmin) {
+        final cashier = _getCashierInfo(map);
+        final cashierId = cashier['id']?.toString().trim();
+        final cashierName = cashier['name']?.toString().toLowerCase().trim() ?? '';
+        final cashierEmail = (cashier['email'] ?? '').toString().toLowerCase().trim();
+
+        final myId = _currentUserId?.toString().trim();
+        final myName = _currentUserName.toLowerCase().trim();
+        final myEmail = _currentUserEmail.toLowerCase().trim();
+
+        final bool idMatches = (cashierId != null && myId != null && cashierId.isNotEmpty && myId.isNotEmpty && cashierId == myId);
+        final bool nameMatches = (cashierName.isNotEmpty && myName.isNotEmpty &&
+            (cashierName == myName || cashierName.contains(myName) || myName.contains(cashierName)));
+        final bool emailMatches = (cashierEmail.isNotEmpty && myEmail.isNotEmpty && cashierEmail == myEmail);
+
+        final bool isMyOrder = idMatches || nameMatches || emailMatches;
+        return isMyOrder;
+      }
+      if (_isAdmin && _selectedCashierFilter != 'All Staff') {
+        final cashier = _getCashierInfo(map);
+        return cashier['name'] == _selectedCashierFilter;
+      }
+      return true;
+    }).toList();
+
+    for (var o in targetOrders) {
       final map = o is Map<String, dynamic> ? o : (o as Map);
       final status = (map['order_status'] ?? map['status'] ?? '').toString().toLowerCase();
       final paymentStatus = (map['payment_status'] ?? '').toString().toLowerCase();
@@ -127,7 +222,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
     setState(() {
       _totalRevenue = rev;
-      _totalBills = _orders.length;
+      _totalBills = targetOrders.length;
       _paidBills = paid;
       _cancelledBills = cancelled;
       _avgBillValue = paid > 0 ? (rev / paid) : 0.0;
@@ -136,10 +231,38 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   List<dynamic> get _filteredOrders {
     return _orders.where((o) {
-      final order = o is Map<String, dynamic> ? o : (o as Map);
+      final order = o is Map<String, dynamic> ? o : Map<String, dynamic>.from(o as Map);
+
+      // 1. Role Filter: Staff ONLY sees bills processed by their own account
+      if (!_isAdmin) {
+        final cashier = _getCashierInfo(order);
+        final cashierId = cashier['id']?.toString().trim();
+        final cashierName = cashier['name']?.toString().toLowerCase().trim() ?? '';
+        final cashierEmail = (cashier['email'] ?? '').toString().toLowerCase().trim();
+
+        final myId = _currentUserId?.toString().trim();
+        final myName = _currentUserName.toLowerCase().trim();
+        final myEmail = _currentUserEmail.toLowerCase().trim();
+
+        final bool idMatches = (cashierId != null && myId != null && cashierId.isNotEmpty && myId.isNotEmpty && cashierId == myId);
+        final bool nameMatches = (cashierName.isNotEmpty && myName.isNotEmpty &&
+            (cashierName == myName || cashierName.contains(myName) || myName.contains(cashierName)));
+        final bool emailMatches = (cashierEmail.isNotEmpty && myEmail.isNotEmpty && cashierEmail == myEmail);
+
+        final bool isMyOrder = idMatches || nameMatches || emailMatches;
+
+        if (!isMyOrder) return false;
+      }
+
+      // 2. Admin Cashier Filter: Filter by selected cashier
+      if (_isAdmin && _selectedCashierFilter != 'All Staff') {
+        final cashier = _getCashierInfo(order);
+        final cashierName = (cashier['name'] ?? '').toString().trim();
+        if (cashierName != _selectedCashierFilter) return false;
+      }
+
       final status = (order['order_status'] ?? order['status'] ?? '').toString().toLowerCase();
       final paymentStatus = (order['payment_status'] ?? '').toString().toLowerCase();
-
       final bool isRefunded = status == 'cancelled' || status == 'refunded' || paymentStatus == 'refunded';
 
       if (_selectedPaymentFilter == 'Refunded') {
@@ -153,7 +276,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         final receiptNo = (order['receipt_number'] ?? order['order_number'] ?? order['id'] ?? '').toString().toLowerCase();
         final name = (order['customer_name'] ?? '').toString().toLowerCase();
         final phone = (order['customer_phone'] ?? '').toString().toLowerCase();
-        if (!receiptNo.contains(q) && !name.contains(q) && !phone.contains(q)) {
+        final cashier = _getCashierInfo(order);
+        final cashierName = (cashier['name'] ?? '').toString().toLowerCase();
+        if (!receiptNo.contains(q) && !name.contains(q) && !phone.contains(q) && !cashierName.contains(q)) {
           return false;
         }
       }
@@ -302,7 +427,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   Future<void> _handleDeleteOrder(Map<String, dynamic> order) async {
     final orderId = order['id'] ?? order['order_id'];
-    final receiptNo = order['receipt_number'] ?? order['order_number'] ?? '#$orderId';
+    final receiptNo = (order['receipt_number'] ?? order['order_number'] ?? '#$orderId').toString();
+    final orderNo = (order['order_number'] ?? '').toString();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -366,10 +492,24 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         const SnackBar(content: Text('Deleting bill from database...'), duration: Duration(seconds: 1)),
       );
 
-      final res = await _apiService.deleteOrder(orderId);
+      final res = await _apiService.deleteOrder(
+        orderId,
+        orderNumber: orderNo,
+        receiptNumber: receiptNo,
+      );
 
       if (!mounted) return;
       if (res['success'] == true) {
+        setState(() {
+          _orders.removeWhere((o) {
+            final map = o is Map<String, dynamic> ? o : Map<String, dynamic>.from(o as Map);
+            final id = (map['id'] ?? map['order_id'] ?? '').toString();
+            final rNo = (map['receipt_number'] ?? map['order_number'] ?? '').toString();
+            final oNo = (map['order_number'] ?? '').toString();
+            return id == orderId.toString() || rNo == receiptNo || (orderNo.isNotEmpty && oNo == orderNo);
+          });
+        });
+        _computeStatsLocally();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(res['message'] ?? 'Bill $receiptNo deleted successfully.'),
@@ -440,7 +580,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       context,
       ReceiptScreen(
         storeName: order['store_name'] ?? 'QUICKE POS Store',
-        cashierName: order['cashier_name'] ?? 'Staff',
+        cashierName: _getCashierInfo(order)['name']?.toString() ?? 'Staff',
         orderItems: itemsList,
         subtotal: subtotal,
         discountAmount: (subtotal - total).clamp(0.0, double.infinity),
@@ -466,7 +606,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Sales & Bills History',
+              _isAdmin ? 'Sales & Bills History' : 'My Sales & Bills',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -474,7 +614,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               ),
             ),
             Text(
-              'POS Billing Ledger & Thermal Receipts',
+              _isAdmin
+                  ? 'All Cashiers & Transactions Ledger'
+                  : 'Cashier: $_currentUserName (${_filteredOrders.length} Bills)',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -511,7 +653,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         onRefresh: () async {
           await Future.wait([_fetchOrders(), _fetchStats()]);
         },
-        child: Column(
+        child: ResponsiveCenter(
+          maxWidth: 1000,
+          child: Column(
           children: [
             // --- TOP KPI METRICS CARDS (GET /orders/stats) ---
             _buildKpiMetricsHeader(),
@@ -545,7 +689,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildKpiMetricsHeader() {
@@ -553,7 +698,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: SizedBox(
-        height: 96,
+        height: 102,
         child: Row(
           children: [
             // 1. Revenue Card
@@ -563,9 +708,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 icon: Icons.account_balance_wallet_rounded,
                 iconColor: const Color(0xFF059669),
                 iconBg: const Color(0xFFECFDF5),
-                title: 'Revenue',
+                cardBg: const Color(0xFFF0FDF4),
+                borderColor: const Color(0xFFBBF7D0),
+                title: _isAdmin ? 'Revenue' : 'My Revenue',
                 value: 'LKR ${_totalRevenue.toStringAsFixed(0)}',
-                subtitle: '$_paidBills Paid Bills',
+                subtitle: _isAdmin ? '$_paidBills Paid Bills' : '$_paidBills Billed by Me',
               ),
             ),
             const SizedBox(width: 8),
@@ -577,7 +724,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 icon: Icons.receipt_long_rounded,
                 iconColor: AppColors.accent,
                 iconBg: AppColors.accentLight,
-                title: 'Total Bills',
+                cardBg: const Color(0xFFF5F3FF),
+                borderColor: const Color(0xFFDDD6FE),
+                title: _isAdmin ? 'Total Bills' : 'My Bills',
                 value: '$_totalBills',
                 subtitle: '$_cancelledBills Refunded',
               ),
@@ -591,7 +740,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 icon: Icons.trending_up_rounded,
                 iconColor: const Color(0xFF6366F1),
                 iconBg: const Color(0xFFEEF2FF),
-                title: 'Avg. Bill',
+                cardBg: const Color(0xFFF8FAFC),
+                borderColor: const Color(0xFFE2E8F0),
+                title: _isAdmin ? 'Avg. Bill' : 'My Avg.',
                 value: 'LKR ${_avgBillValue.toStringAsFixed(0)}',
                 subtitle: 'Per transaction',
               ),
@@ -609,8 +760,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     required String title,
     required String value,
     required String subtitle,
+    Color? cardBg,
+    Color? borderColor,
   }) {
     return HoverScaleCard(
+      backgroundColor: cardBg ?? Colors.white,
+      border: Border.all(color: borderColor ?? const Color(0xFFE2E8F0), width: 1.2),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       borderRadius: BorderRadius.circular(14),
       scaleFactor: 1.03,
@@ -781,6 +936,52 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               ),
             ],
           ),
+
+          // Cashier Filter Chips (For Admin when multiple cashiers exist)
+          if (_isAdmin && _availableCashiers.length > 2) ...[
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6.0),
+                    child: Text('Staff:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                  ),
+                  ..._availableCashiers.map((cName) {
+                    final isSel = _selectedCashierFilter == cName;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6.0),
+                      child: ChoiceChip(
+                        label: Text(cName),
+                        selected: isSel,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedCashierFilter = cName;
+                          });
+                          _computeStatsLocally();
+                        },
+                        selectedColor: const Color(0xFF0F172A),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        labelStyle: TextStyle(
+                          color: isSel ? Colors.white : AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.5,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isSel ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -795,6 +996,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     final paymentMethod = (order['payment_method'] ?? 'cash').toString().toLowerCase();
     final itemsCount = (order['items'] is List) ? (order['items'] as List).length : 1;
     final createdAt = order['created_at']?.toString() ?? 'Just now';
+
+    final cashierInfo = _getCashierInfo(order);
+    final String cashierName = cashierInfo['name']?.toString() ?? 'Store Admin';
+    final String cashierRole = cashierInfo['role']?.toString().toLowerCase() ?? 'admin';
+    final bool isStaffCashier = cashierRole == 'staff' || cashierRole == 'cashier';
+    final customerName = (order['customer_name'] ?? order['customerName'] ?? '').toString().trim();
 
     final bool isCancelled = status == 'cancelled' || status == 'refunded' || paymentStatus == 'refunded';
 
@@ -924,12 +1131,92 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                         child: const Icon(Icons.print_rounded, size: 18, color: AppColors.textPrimary),
                       ),
                     ),
+                    if (_isAdmin) ...[
+                      const SizedBox(width: 6),
+                      // Admin Delete Bill button
+                      AnimatedTapButton(
+                        scaleDown: 0.88,
+                        onTap: () => _handleDeleteOrder(order),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFEE2E2)),
+                          ),
+                          child: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 6),
                     // View details arrow
                     const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
                   ],
                 ),
               ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // Bottom Cashier & Customer Info Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Row(
+                children: [
+                  // Cashier badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: isStaffCashier ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isStaffCashier ? const Color(0xFFBBF7D0) : const Color(0xFFBFDBFE),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isStaffCashier ? Icons.badge_outlined : Icons.shield_outlined,
+                          size: 11,
+                          color: isStaffCashier ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Cashier: $cashierName',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: isStaffCashier ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Customer name if present
+                  if (customerName.isNotEmpty && customerName != 'Walk-in Customer') ...[
+                    const SizedBox(width: 8),
+                    const Text('•', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.person_outline_rounded, size: 12, color: AppColors.textMuted),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
@@ -1001,13 +1288,37 @@ class _BillDetailsModal extends StatelessWidget {
     final itemsList = (itemsRaw is List) ? itemsRaw : [];
     final bool isCancelled = status == 'cancelled' || status == 'refunded' || paymentStatus == 'refunded';
 
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
+    // Cashier and Customer info
+    String cashierName = (order['cashier_name'] ?? order['cashierName'] ?? '').toString().trim();
+    String cashierRole = (order['role'] ?? '').toString().trim();
+    if (cashierName.isEmpty && order['notes'] != null) {
+      try {
+        final decoded = jsonDecode(order['notes'].toString());
+        if (decoded is Map<String, dynamic>) {
+          cashierName = (decoded['cashier_name'] ?? decoded['cashierName'] ?? '').toString().trim();
+          cashierRole = (decoded['role'] ?? '').toString().trim();
+        }
+      } catch (_) {}
+    }
+    if (cashierName.isEmpty) {
+      cashierName = 'Store Admin';
+      cashierRole = 'admin';
+    }
+    final bool isStaffCashier = cashierRole.toLowerCase() == 'staff' || cashierRole.toLowerCase() == 'cashier';
+    final customerName = (order['customer_name'] ?? order['customerName'] ?? '').toString().trim();
+    final customerPhone = (order['customer_phone'] ?? order['customerPhone'] ?? '').toString().trim();
+
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
         children: [
           // Drag handle
           const SizedBox(height: 12),
@@ -1069,6 +1380,75 @@ class _BillDetailsModal extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                // Cashier and Customer info card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                isStaffCashier ? Icons.badge_outlined : Icons.shield_outlined,
+                                size: 16,
+                                color: isStaffCashier ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Billed By: $cashierName',
+                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isStaffCashier ? const Color(0xFFDCFCE7) : const Color(0xFFDBEAFE),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isStaffCashier ? 'Staff' : 'Owner / Admin',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isStaffCashier ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (customerName.isNotEmpty && customerName != 'Walk-in Customer') ...[
+                        const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                        Row(
+                          children: [
+                            const Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textMuted),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Customer: $customerName',
+                              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                            ),
+                            if (customerPhone.isNotEmpty && customerPhone != '0770000000') ...[
+                              const Spacer(),
+                              Text(
+                                customerPhone,
+                                style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
                 Text('PURCHASED ITEMS', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
                 const SizedBox(height: 10),
 
@@ -1134,26 +1514,44 @@ class _BillDetailsModal extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
             child: Row(
               children: [
-                if (!isCancelled) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onCancelRefund,
-                      icon: const Icon(Icons.cancel_outlined, color: Color(0xFFDC2626), size: 18),
-                      label: const Text('Cancel / Refund', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFFCA5A5)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                if (isAdmin) ...[
+                  if (!isCancelled) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onCancelRefund,
+                        icon: const Icon(Icons.cancel_outlined, color: Color(0xFFDC2626), size: 16),
+                        label: const Text('Refund', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFFCA5A5)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
+                    const SizedBox(width: 8),
+                  ],
+                  if (onDelete != null) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onDelete,
+                        icon: const Icon(Icons.delete_forever_rounded, color: Color(0xFFDC2626), size: 16),
+                        label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFEF2F2),
+                          side: const BorderSide(color: Color(0xFFFCA5A5)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ],
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: onReprint,
                     icon: const Icon(Icons.print_rounded, color: Colors.white, size: 18),
-                    label: const Text('Thermal Re-Print', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: const Text('Re-Print', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
@@ -1167,7 +1565,8 @@ class _BillDetailsModal extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSummaryRow(String label, String value, {bool isDiscount = false}) {

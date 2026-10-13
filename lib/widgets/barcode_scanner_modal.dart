@@ -105,11 +105,13 @@ class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
-      ),
-      decoration: const BoxDecoration(
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: MediaQuery.of(context).size.height * 0.90,
+        ),
+        decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
@@ -586,7 +588,8 @@ class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTi
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildViewfinderCorners() {

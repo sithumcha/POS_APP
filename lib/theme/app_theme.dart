@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -15,6 +14,10 @@ class AppColors {
   static const Color emeraldLight = Color(0xFFECFDF5);
   static const Color amber = Color(0xFFF59E0B);
   static const Color amberLight = Color(0xFFFFFBEB);
+  static const Color violet = Color(0xFF8B5CF6);
+  static const Color violetLight = Color(0xFFF5F3FF);
+  static const Color cyan = Color(0xFF06B6D4);
+  static const Color cyanLight = Color(0xFFECFEFF);
 
   // Surfaces & Backgrounds
   static const Color background = Color(0xFFF8FAFC); // Clean Modern Slate
@@ -29,6 +32,7 @@ class AppColors {
 
   // Borders & Dividers
   static const Color border = Color(0xFFE2E8F0); // Subtle Slate border
+  static const Color borderLight = Color(0xFFF1F5F9);
   static const Color borderFocused = Color(0xFF0F172A);
 
   // Interactive
@@ -36,6 +40,43 @@ class AppColors {
   static const Color success = Color(0xFF10B981);
   static const Color error = Color(0xFFEF4444);
   static const Color errorLight = Color(0xFFFEF2F2);
+
+  // Linear Gradients
+  static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+  );
+
+  static const LinearGradient emeraldGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF10B981), Color(0xFF059669)],
+  );
+
+  static const LinearGradient indigoGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
+  );
+
+  static const LinearGradient violetGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+  );
+
+  static const LinearGradient amberGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+  );
+
+  static const LinearGradient darkCardGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0F172A), Color(0xFF020617)],
+  );
 
   // Soft Fintech Box Shadow
   static List<BoxShadow> get softShadow => [
@@ -58,6 +99,67 @@ class AppColors {
           offset: const Offset(0, 8),
         ),
       ];
+
+  static List<BoxShadow> glowShadow(Color color, {double opacity = 0.25}) => [
+        BoxShadow(
+          color: color.withOpacity(opacity),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ];
+}
+
+class AppStyles {
+  /// Standard modern card decoration
+  static BoxDecoration cardDecoration({
+    Color? color,
+    BorderRadius? borderRadius,
+    Border? border,
+    List<BoxShadow>? shadows,
+  }) {
+    return BoxDecoration(
+      color: color ?? Colors.white,
+      borderRadius: borderRadius ?? BorderRadius.circular(20),
+      border: border ?? Border.all(color: AppColors.border, width: 1.2),
+      boxShadow: shadows ?? AppColors.softShadow,
+    );
+  }
+
+  /// Glassmorphic container decoration
+  static BoxDecoration glassDecoration({
+    Color? color,
+    BorderRadius? borderRadius,
+    Color? borderColor,
+  }) {
+    return BoxDecoration(
+      color: color ?? Colors.white.withOpacity(0.85),
+      borderRadius: borderRadius ?? BorderRadius.circular(20),
+      border: Border.all(
+        color: borderColor ?? Colors.white.withOpacity(0.8),
+        width: 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFF0F172A).withOpacity(0.04),
+          blurRadius: 20,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+  }
+
+  /// Pill badge decoration
+  static BoxDecoration pillDecoration({
+    required Color background,
+    Color? border,
+    double radius = 30,
+  }) {
+    return BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(radius),
+      border: border != null ? Border.all(color: border, width: 1) : null,
+    );
+  }
 }
 
 class AppTheme {
@@ -67,9 +169,16 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
+      focusColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: AppColors.emerald,
+        selectionColor: Color(0x3310B981),
+        selectionHandleColor: AppColors.emerald,
+      ),
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
-        secondary: AppColors.accent,
+        secondary: AppColors.emerald,
         surface: AppColors.surface,
         error: AppColors.error,
         onPrimary: Colors.white,
@@ -114,8 +223,8 @@ class AppTheme {
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.border, width: 1),
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.border, width: 1.2),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -134,23 +243,23 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.2),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border, width: 1),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.borderFocused, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.borderFocused, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.error, width: 1),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.2),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.8),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(

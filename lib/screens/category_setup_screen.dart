@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/responsive.dart';
 import '../widgets/ui_animation_helper.dart';
 
 class CategorySetupScreen extends StatefulWidget {
@@ -41,6 +43,20 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
   /// 1. INITIAL BATCH LOADING:
   /// Concurrently loads both main categories and subcategories from backend API.
   Future<void> _loadAllData() async {
+    final isStaff = await _apiService.isStaffUser();
+    if (isStaff) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Restricted: Only Store Owner / Admin can manage categories.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
     await Future.wait([
       _loadCategories(),
       _loadSubcategories(),
@@ -268,8 +284,10 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
+            return ResponsiveCenter(
+              maxWidth: 560,
+              child: Padding(
+                padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
                 top: 20,
@@ -491,8 +509,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -569,8 +588,10 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
+            return ResponsiveCenter(
+              maxWidth: 560,
+              child: Padding(
+                padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
                 top: 20,
@@ -825,8 +846,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -843,17 +865,18 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Categories & Subcategories Setup',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 18),
+          style: GoogleFonts.plusJakartaSans(color: const Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 18),
         ),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.black,
+          labelColor: const Color(0xFF0F172A),
           unselectedLabelColor: AppColors.textMuted,
-          indicatorColor: Colors.black,
+          indicatorColor: const Color(0xFF0F172A),
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 14),
           tabs: const [
             Tab(text: 'Categories'),
             Tab(text: 'Subcategories'),
@@ -881,7 +904,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
           ? const Center(child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
           : _categories.isEmpty
               ? _buildEmptyState('No parent categories found', 'Tap + to create a category')
-              : ListView.separated(
+              : ResponsiveCenter(
+                  maxWidth: 900,
+                  child: ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: _categories.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -984,6 +1009,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                     );
                   },
                 ),
+              ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCategoryModalForm(),
         backgroundColor: Colors.black,
@@ -1005,7 +1031,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
+      body: ResponsiveCenter(
+        maxWidth: 900,
+        child: Column(
         children: [
           // Filter Dropdown by Parent Category
           Container(
@@ -1153,6 +1181,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
           ),
         ],
       ),
+    ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showSubcategoryModalForm(),
         backgroundColor: Colors.black,

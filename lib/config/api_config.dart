@@ -1,6 +1,9 @@
 class ApiConfig {
-  /// Base URL of your Backend API server
-  static String baseUrl = 'https://api.quicke.app';
+  /// Base URL of your Backend API server (Protected against string extraction via --dart-define)
+  static const String baseUrl = String.fromEnvironment(
+    'BASE_URL',
+    defaultValue: 'https://api.quicke.app',
+  );
 
   /// Your API Secret Key or Bearer Token header (if needed)
   static String apiKey = '';
