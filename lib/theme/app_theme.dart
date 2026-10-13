@@ -1,17 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// ----------------------------------------------------------------------------
+/// QUICK POS DESIGN SYSTEM (Colors & Design Tokens)
+/// Aligned strictly with the Design System UI Board:
+/// - Primary: Vibrant Mint Emerald (#00D26A / #10B981)
+/// - Secondary: Deep Pine / Forest Green (#065F46 / #064E3B)
+/// - Tertiary: Mint Teal (#0D9488 / #14B8A6)
+/// - Neutral: Dark Obsidian Slate (#0F172A)
+/// - Typography: Plus Jakarta Sans (Headings/Body) + JetBrains Mono (Codes/Labels)
+/// ----------------------------------------------------------------------------
 class AppColors {
-  // Modern Fintech Palette
-  static const Color primary = Color(0xFF0F172A); // Sleek Obsidian / Slate 900
+  // --- 1. DESIGN SYSTEM BRAND SWATCHES ---
+  /// Primary Brand Color: Vibrant Mint Emerald
+  static const Color primaryGreen = Color(0xFF00D26A);
+  static const Color emerald = Color(0xFF10B981);
+  static const Color emeraldLight = Color(0xFFECFDF5);
+  static const Color emeraldDark = Color(0xFF059669);
+
+  /// Secondary Brand Color: Deep Forest / Pine Green (As seen on "Primary" Button in board)
+  static const Color secondaryGreen = Color(0xFF065F46);
+  static const Color deepForest = Color(0xFF064E3B);
+  static const Color pineLight = Color(0xFFE6F4EA);
+
+  /// Tertiary Brand Color: Mint / Teal
+  static const Color tertiaryGreen = Color(0xFF0D9488);
+  static const Color tertiaryLight = Color(0xFFCCFBF1);
+
+  /// Neutral Palette (Centered on #0F172A from the Design Board)
+  static const Color neutralDark = Color(0xFF0F172A); // Base Dark Obsidian
+  static const Color neutralCard = Color(0xFF1E293B);
   static const Color primaryDark = Color(0xFF020617);
   static const Color primaryLight = Color(0xFF1E293B);
 
-  // Modern Accents
-  static const Color accent = Color(0xFF6366F1); // Electric Indigo
+  /// Primary action color for existing widgets (points to Deep Pine Green from board)
+  static const Color primary = Color(0xFF065F46);
+
+  // Surfaces & Backgrounds
+  static const Color background = Color(0xFFF8FAFC); // Clean Modern Slate
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceElevated = Color(0xFFFFFFFF);
+  static const Color cardSubtle = Color(0xFFF1F5F9); // Soft Tint Background
+
+  // Typography
+  static const Color textPrimary = Color(0xFF0F172A); // Rich Obsidian
+  static const Color textSecondary = Color(0xFF475569); // Slate 600
+  static const Color textMuted = Color(0xFF94A3B8); // Slate 400
+
+  // Borders & Dividers
+  static const Color border = Color(0xFFE2E8F0); // Subtle Slate border
+  static const Color borderLight = Color(0xFFF1F5F9);
+  static const Color borderFocused = Color(0xFF065F46);
+
+  // Interactive Accents
+  static const Color accent = Color(0xFF6366F1); // Indigo
   static const Color accentLight = Color(0xFFEEF2FF);
-  static const Color emerald = Color(0xFF10B981); // Crisp Emerald Green
-  static const Color emeraldLight = Color(0xFFECFDF5);
   static const Color amber = Color(0xFFF59E0B);
   static const Color amberLight = Color(0xFFFFFBEB);
   static const Color violet = Color(0xFF8B5CF6);
@@ -19,39 +62,34 @@ class AppColors {
   static const Color cyan = Color(0xFF06B6D4);
   static const Color cyanLight = Color(0xFFECFEFF);
 
-  // Surfaces & Backgrounds
-  static const Color background = Color(0xFFF8FAFC); // Clean Modern Slate
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceElevated = Color(0xFFFFFFFF);
-  static const Color cardSubtle = Color(0xFFF1F5F9);
-
-  // Typography
-  static const Color textPrimary = Color(0xFF0F172A); // Rich Obsidian
-  static const Color textSecondary = Color(0xFF64748B); // Slate 500
-  static const Color textMuted = Color(0xFF94A3B8); // Slate 400
-
-  // Borders & Dividers
-  static const Color border = Color(0xFFE2E8F0); // Subtle Slate border
-  static const Color borderLight = Color(0xFFF1F5F9);
-  static const Color borderFocused = Color(0xFF0F172A);
-
-  // Interactive
   static const Color buttonGrey = Color(0xFF475569);
-  static const Color success = Color(0xFF10B981);
-  static const Color error = Color(0xFFEF4444);
+  static const Color success = Color(0xFF059669);
+  static const Color error = Color(0xFFDC2626); // Red Action from Design Board
   static const Color errorLight = Color(0xFFFEF2F2);
 
-  // Linear Gradients
+  // Linear Gradients matching the design kit
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+    colors: [Color(0xFF065F46), Color(0xFF064E3B)],
   );
 
   static const LinearGradient emeraldGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF10B981), Color(0xFF059669)],
+    colors: [Color(0xFF00D26A), Color(0xFF059669)],
+  );
+
+  static const LinearGradient mintTealGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF00D26A), Color(0xFF0D9488)],
+  );
+
+  static const LinearGradient neutralGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
   );
 
   static const LinearGradient indigoGradient = LinearGradient(
@@ -78,7 +116,7 @@ class AppColors {
     colors: [Color(0xFF0F172A), Color(0xFF020617)],
   );
 
-  // Soft Fintech Box Shadow
+  // Box Shadows
   static List<BoxShadow> get softShadow => [
         BoxShadow(
           color: const Color(0xFF0F172A).withOpacity(0.04),
@@ -109,8 +147,92 @@ class AppColors {
       ];
 }
 
+/// ----------------------------------------------------------------------------
+/// COMPONENT STYLES & TYPOGRAPHY HELPERS (From Design Board)
+/// ----------------------------------------------------------------------------
 class AppStyles {
-  /// Standard modern card decoration
+  // --- TYPOGRAPHY TOKENS ---
+  /// Main Brand Font: Plus Jakarta Sans
+  static TextStyle heading({
+    double fontSize = 18,
+    FontWeight fontWeight = FontWeight.w800,
+    Color color = AppColors.textPrimary,
+    double? letterSpacing = -0.4,
+  }) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+      );
+
+  static TextStyle body({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w500,
+    Color color = AppColors.textSecondary,
+  }) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+      );
+
+  /// Monospace Font: JetBrains Mono (For SKU, codes, prices & technical tags)
+  static TextStyle mono({
+    double fontSize = 13,
+    FontWeight fontWeight = FontWeight.w700,
+    Color color = AppColors.textPrimary,
+    double? letterSpacing,
+  }) =>
+      GoogleFonts.jetBrainsMono(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+      );
+
+  // --- BUTTON STYLES (Exact 4 styles from the Design Board) ---
+  /// 1. Primary Button: Deep Forest Green (#065F46) + White
+  static ButtonStyle get primaryButton => ElevatedButton.styleFrom(
+        backgroundColor: AppColors.secondaryGreen,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+      );
+
+  /// 2. Secondary Button: Soft Tinted Slate + Dark Text
+  static ButtonStyle get secondaryButton => ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFEEF2FF),
+        foregroundColor: const Color(0xFF334155),
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+      );
+
+  /// 3. Inverted Button: Obsidian Dark (#0F172A) + White Text
+  static ButtonStyle get invertedButton => ElevatedButton.styleFrom(
+        backgroundColor: AppColors.neutralDark,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+      );
+
+  /// 4. Outlined Button: White Background + Clean Border
+  static ButtonStyle get outlinedButton => OutlinedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.textPrimary,
+        side: const BorderSide(color: AppColors.border, width: 1.2),
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+      );
+
+  // --- DECORATION TOKENS ---
   static BoxDecoration cardDecoration({
     Color? color,
     BorderRadius? borderRadius,
@@ -125,7 +247,6 @@ class AppStyles {
     );
   }
 
-  /// Glassmorphic container decoration
   static BoxDecoration glassDecoration({
     Color? color,
     BorderRadius? borderRadius,
@@ -148,7 +269,7 @@ class AppStyles {
     );
   }
 
-  /// Pill badge decoration
+  /// Pill badge decoration (like the "Label" chip on the design board)
   static BoxDecoration pillDecoration({
     required Color background,
     Color? border,
@@ -162,6 +283,9 @@ class AppStyles {
   }
 }
 
+/// ----------------------------------------------------------------------------
+/// THEMEDATA (Material 3 AppTheme)
+/// ----------------------------------------------------------------------------
 class AppTheme {
   static ThemeData get lightTheme {
     final baseTextTheme = GoogleFonts.plusJakartaSansTextTheme();
@@ -172,13 +296,14 @@ class AppTheme {
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       textSelectionTheme: const TextSelectionThemeData(
-        cursorColor: AppColors.emerald,
-        selectionColor: Color(0x3310B981),
-        selectionHandleColor: AppColors.emerald,
+        cursorColor: AppColors.primaryGreen,
+        selectionColor: Color(0x3300D26A),
+        selectionHandleColor: AppColors.primaryGreen,
       ),
       colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
-        secondary: AppColors.emerald,
+        primary: AppColors.secondaryGreen, // #065F46 Deep Pine (Design Board Primary Button)
+        secondary: AppColors.primaryGreen, // #00D26A Vibrant Mint
+        tertiary: AppColors.tertiaryGreen, // #0D9488 Teal
         surface: AppColors.surface,
         error: AppColors.error,
         onPrimary: Colors.white,
@@ -264,7 +389,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: AppColors.secondaryGreen,
           foregroundColor: Colors.white,
           elevation: 0,
           minimumSize: const Size(0, 50),
@@ -277,6 +402,11 @@ class AppTheme {
             letterSpacing: 0.2,
           ),
         ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.secondaryGreen,
+        foregroundColor: Colors.white,
+        elevation: 3,
       ),
     );
   }

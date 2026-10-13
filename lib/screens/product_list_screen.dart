@@ -563,9 +563,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                           'SKU: $sku',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
                                             color: AppColors.textMuted,
                                           ),
                                         ),

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -12,6 +11,7 @@ class CurrencyText extends StatelessWidget {
   final bool showCurrency;
   final TextDecoration? decoration;
   final Color? decorationColor;
+  final bool useMono;
 
   const CurrencyText({
     super.key,
@@ -24,6 +24,7 @@ class CurrencyText extends StatelessWidget {
     this.showCurrency = true,
     this.decoration,
     this.decorationColor,
+    this.useMono = true,
   });
 
   /// Formats integer part with thousands commas (e.g. 500000 -> 500,000)
@@ -46,8 +47,7 @@ class CurrencyText extends StatelessWidget {
 
     return RichText(
       text: TextSpan(
-        style: GoogleFonts.plusJakartaSans(
-          fontFeatures: const [FontFeature.tabularFigures()],
+        style: TextStyle(
           color: textColor,
           decoration: decoration,
           decorationColor: decorationColor ?? textColor,
@@ -57,28 +57,42 @@ class CurrencyText extends StatelessWidget {
             TextSpan(
               text: '$currency ',
               style: GoogleFonts.plusJakartaSans(
-                fontSize: fontSize * 0.75,
-                fontWeight: FontWeight.w600,
+                fontSize: fontSize * 0.72,
+                fontWeight: FontWeight.w700,
                 color: curColor,
                 letterSpacing: 0.2,
               ),
             ),
           TextSpan(
             text: formattedInt,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: fontSize,
-              fontWeight: fontWeight,
-              color: textColor,
-              letterSpacing: -0.3,
-            ),
+            style: useMono
+                ? GoogleFonts.jetBrainsMono(
+                    fontSize: fontSize,
+                    fontWeight: fontWeight,
+                    color: textColor,
+                    letterSpacing: -0.3,
+                  )
+                : GoogleFonts.plusJakartaSans(
+                    fontSize: fontSize,
+                    fontWeight: fontWeight,
+                    color: textColor,
+                    letterSpacing: -0.3,
+                  ),
           ),
           TextSpan(
             text: '.$decPart',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: fontSize * 0.82,
-              fontWeight: FontWeight.w500,
-              color: textColor.withOpacity(0.85),
-            ),
+            style: useMono
+                ? GoogleFonts.jetBrainsMono(
+                    fontSize: fontSize * 0.82,
+                    fontWeight: FontWeight.w600,
+                    color: textColor.withOpacity(0.85),
+                    letterSpacing: -0.2,
+                  )
+                : GoogleFonts.plusJakartaSans(
+                    fontSize: fontSize * 0.82,
+                    fontWeight: FontWeight.w500,
+                    color: textColor.withOpacity(0.85),
+                  ),
           ),
         ],
       ),
