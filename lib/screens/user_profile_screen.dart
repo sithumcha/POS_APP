@@ -7,6 +7,7 @@ import '../theme/responsive.dart';
 import '../widgets/bluetooth_printer_dialog.dart';
 import '../widgets/server_status_badge.dart';
 import '../widgets/ui_animation_helper.dart';
+import '../widgets/product_image_widget.dart';
 import 'login_screen.dart';
 import 'sales_history_screen.dart';
 import 'store_setup_screen.dart';
@@ -869,7 +870,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final lastName = (_userData['last_name'] ?? 'User').toString();
     final fullName = '$firstName $lastName'.trim();
     final email = (_userData['email'] ?? widget.userEmail).toString();
-    final userId = (_userData['id'] ?? 10).toString();
     final rawUserType = _userData['user_type'];
     final int? userType = int.tryParse(rawUserType?.toString() ?? '');
 
@@ -977,21 +977,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     ),
                                     clipBehavior: Clip.antiAlias,
                                     child: logoUrl.isNotEmpty
-                                        ? Image.network(
-                                            logoUrl,
+                                        ? ProductImageWidget(
+                                            imageUrl: logoUrl,
+                                            productName: fullName,
+                                            width: 80,
+                                            height: 80,
+                                            borderRadius: BorderRadius.circular(40),
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => CircleAvatar(
-                                              radius: 40,
-                                              backgroundColor: Colors.black,
-                                              child: Text(
-                                                firstName.isNotEmpty ? firstName[0].toUpperCase() : 'S',
-                                                style: const TextStyle(
-                                                  fontSize: 32,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
                                           )
                                         : CircleAvatar(
                                             radius: 40,
@@ -1053,42 +1045,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ),
                         const SizedBox(height: 10),
 
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: const Color(0xFFBFDBFE)),
-                              ),
-                              child: Text(
-                                role.toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1D4ED8),
-                                ),
-                              ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Text(
+                            role.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1D4ED8),
+                              letterSpacing: 0.4,
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                'ID: #$userId',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
@@ -1106,10 +1078,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         _buildDetailTile(
                           Icons.storefront_rounded,
                           'Store Name',
-                          widget.storeName.isNotEmpty
-                              ? widget.storeName
-                              : ((_userData['store_name'] != null && _userData['store_name'].toString().isNotEmpty)
-                                  ? _userData['store_name'].toString()
+                          (_userData['store_name'] != null &&
+                                  _userData['store_name'].toString().trim().isNotEmpty &&
+                                  _userData['store_name'] != 'QUICKE POS Store' &&
+                                  _userData['store_name'] != 'Admin Store' &&
+                                  _userData['store_name'] != 'User Store')
+                              ? _userData['store_name'].toString().trim()
+                              : (widget.storeName.isNotEmpty &&
+                                      widget.storeName != 'QUICKE POS Store' &&
+                                      widget.storeName != 'Quicke POS Terminal'
+                                  ? widget.storeName
                                   : 'QUICKE POS Store'),
                         ),
                         const Divider(height: 1),

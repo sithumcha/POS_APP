@@ -53,6 +53,8 @@ class _PosScreenState extends State<PosScreen> {
   String _searchQuery = '';
   bool _isLoadingProducts = false;
   bool _isStaff = false;
+  String? _storeLogoUrl;
+  String? _effectiveStoreName;
 
   final List<Map<String, dynamic>> _cartItems = [];
 
@@ -68,7 +70,7 @@ class _PosScreenState extends State<PosScreen> {
     super.dispose();
   }
 
-  /// 1. CATALOG INITIALIZATION:
+  /// 1. CATALOG & STORE BRANDING INITIALIZATION:
   /// Loads initial categories and products using CatalogSyncRepository.
   /// Prioritizes Drift SQLite offline cache for lightning speed, then syncs with remote backend.
   Future<void> _loadInitialData() async {
@@ -78,19 +80,99 @@ class _PosScreenState extends State<PosScreen> {
         _catalogRepo.getCachedOrRemoteCategories(),
         _catalogRepo.getCachedOrRemoteProducts(),
         _apiService.isStaffUser(),
+        _apiService.getStoreBranding(),
       ]);
 
       if (!mounted) return;
+      final branding = results[3] as Map<String, dynamic>;
+      final fetchedLogo = (branding['logo_url'] ?? '').toString().trim();
+      final fetchedName = (branding['store_name'] ?? '').toString().trim();
+
       setState(() {
         _categories = results[0] as List<dynamic>;
         _products = results[1] as List<dynamic>;
         _isStaff = results[2] as bool;
         _subcategories = []; // Clear subcategories on initial "All Items" catalog view
+        if (fetchedLogo.isNotEmpty) {
+          _storeLogoUrl = fetchedLogo;
+        }
+        if (fetchedName.isNotEmpty && fetchedName != 'Admin Store' && fetchedName != 'User Store') {
+          _effectiveStoreName = fetchedName;
+        }
         _isLoadingProducts = false;
       });
     } catch (_) {
       if (mounted) setState(() => _isLoadingProducts = false);
     }
+  }
+
+  /// Refreshes store branding (logo and store name) dynamically without reloading product catalog
+  Future<void> _refreshStoreBranding() async {
+    try {
+      final branding = await _apiService.getStoreBranding();
+      if (!mounted) return;
+      final fetchedLogo = (branding['logo_url'] ?? '').toString().trim();
+      final fetchedName = (branding['store_name'] ?? '').toString().trim();
+      setState(() {
+        _storeLogoUrl = fetchedLogo.isNotEmpty ? fetchedLogo : null;
+        if (fetchedName.isNotEmpty && fetchedName != 'Admin Store' && fetchedName != 'User Store') {
+          _effectiveStoreName = fetchedName;
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// Builds dynamic store logo widget: fetches store branding logo or falls back to emerald bolt container
+  Widget _buildStoreLogoWidget() {
+    final hasLogo = _storeLogoUrl != null && _storeLogoUrl!.trim().isNotEmpty;
+    if (hasLogo) {
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ProductImageWidget(
+            imageUrl: _storeLogoUrl,
+            productName: _effectiveStoreName ?? widget.storeName,
+            width: 36,
+            height: 36,
+            borderRadius: BorderRadius.circular(10),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        gradient: AppColors.primaryGradient,
+        borderRadius: BorderRadius.circular(11),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Center(
+        child: Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 21),
+      ),
+    );
   }
 
   /// 2. CATEGORY FILTER LOGIC:
@@ -400,15 +482,20 @@ class _PosScreenState extends State<PosScreen> {
       backgroundColor: const Color(0xFFF9FAFB),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: ResponsiveCenter(
-          maxWidth: isWideTerminal ? 640 : double.infinity,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isWideTerminal && _cartItems.isNotEmpty) _buildCheckoutBar(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isWideTerminal && _cartItems.isNotEmpty) _buildCheckoutBar(),
+            if (isWideTerminal)
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: _buildBottomDock(lowStockCount),
+                ),
+              )
+            else
               _buildBottomDock(lowStockCount),
-            ],
-          ),
+          ],
         ),
       ),
       body: SafeArea(
@@ -443,55 +530,64 @@ class _PosScreenState extends State<PosScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
           child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(11),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(11),
+                    onTap: () {
+                      AppNavigator.push(
+                        context,
+                        UserProfileScreen(
+                          userEmail: widget.userEmail,
+                          storeName: _effectiveStoreName ?? widget.storeName,
                         ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 21),
-                    ),
+                      ).then((_) => _refreshStoreBranding());
+                    },
+                    child: _buildStoreLogoWidget(),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.storeName.isNotEmpty ? widget.storeName : 'Quicke POS Terminal',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.4,
-                            color: const Color(0xFF0F172A),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () {
+                        AppNavigator.push(
+                          context,
+                          UserProfileScreen(
+                            userEmail: widget.userEmail,
+                            storeName: _effectiveStoreName ?? widget.storeName,
                           ),
-                        ),
-                        Row(
-                          children: [
-                            const PulsingStatusDot(color: Color(0xFF10B981), size: 6),
-                            const SizedBox(width: 6),
-                            Text(
-                              _isStaff ? 'Staff Cashier Mode' : 'Store Owner / Admin',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
-                              ),
+                        ).then((_) => _refreshStoreBranding());
+                      },
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (_effectiveStoreName != null && _effectiveStoreName!.trim().isNotEmpty)
+                                ? _effectiveStoreName!
+                                : (widget.storeName.isNotEmpty ? widget.storeName : 'Quicke POS Terminal'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                              color: const Color(0xFF0F172A),
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          Row(
+                            children: [
+                              const PulsingStatusDot(color: Color(0xFF10B981), size: 6),
+                              const SizedBox(width: 6),
+                              Text(
+                                _isStaff ? 'Staff Cashier Mode' : 'Store Owner / Admin',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   ValueListenableBuilder<List<AppNotificationItem>>(
@@ -545,9 +641,9 @@ class _PosScreenState extends State<PosScreen> {
                       context,
                       UserProfileScreen(
                         userEmail: widget.userEmail,
-                        storeName: widget.storeName,
+                        storeName: _effectiveStoreName ?? widget.storeName,
                       ),
-                    );
+                    ).then((_) => _refreshStoreBranding());
                   }),
                 ],
               ),
@@ -1833,10 +1929,10 @@ class _PosScreenState extends State<PosScreen> {
                               context,
                               StoreSetupScreen(
                                 userEmail: widget.userEmail,
-                                initialStoreName: widget.storeName,
+                                initialStoreName: _effectiveStoreName ?? widget.storeName,
                                 isEditing: true,
                               ),
-                            );
+                            ).then((_) => _refreshStoreBranding());
                           },
                         ),
 
@@ -1851,9 +1947,9 @@ class _PosScreenState extends State<PosScreen> {
                             context,
                             UserProfileScreen(
                               userEmail: widget.userEmail,
-                              storeName: widget.storeName,
+                              storeName: _effectiveStoreName ?? widget.storeName,
                             ),
-                          );
+                          ).then((_) => _refreshStoreBranding());
                         },
                       ),
 

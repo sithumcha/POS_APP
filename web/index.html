@@ -6,146 +6,316 @@
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport">
   <title>QuickeApp POS</title>
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Custom Fonts -->
+  <!-- Preconnect & Fonts -->
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <!-- Tailwind Configuration -->
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          colors: {
-            brand: {
-              emerald: '#00C076',
-              mint: '#10B981',
-              darkMint: '#059669',
-              lightMint: '#ECFDF5',
-              navy: '#0B132B',
-              slate: '#0F172A',
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Custom Keyframe & Glow Animations -->
-  <style data-purpose="custom-animations">
+  <!-- High-Performance Zero-Dependency Vanilla CSS Splash Styles -->
+  <style>
     @keyframes floatSoft {
-      0%, 100% {
-        transform: translateY(0px) scale(1);
-      }
-      50% {
-        transform: translateY(-8px) scale(1.02);
-      }
+      0%, 100% { transform: translateY(0px) scale(1); }
+      50% { transform: translateY(-8px) scale(1.02); }
     }
 
     @keyframes pulseGlow {
-      0%, 100% {
-        opacity: 0.45;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 0.85;
-        transform: scale(1.15);
-      }
-    }
-
-    @keyframes shimmerSweep {
-      0% {
-        transform: translateX(-100%);
-      }
-      100% {
-        transform: translateX(250%);
-      }
+      0%, 100% { opacity: 0.45; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.15); }
     }
 
     @keyframes subtleDrift {
-      0%, 100% {
-        transform: translate(0, 0);
-      }
-      50% {
-        transform: translate(12px, -15px);
-      }
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(12px, -15px); }
     }
 
-    .animate-float {
-      animation: floatSoft 4.5s ease-in-out infinite;
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
-    .animate-glow-pulse {
-      animation: pulseGlow 3.5s ease-in-out infinite;
+    html, body {
+      background-color: #F8FAFC !important;
+      color: #1E293B;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    .animate-shimmer {
-      animation: shimmerSweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    }
-
-    .animate-drift {
-      animation: subtleDrift 8s ease-in-out infinite;
+    canvas, flutter-view, flt-glass-pane, flt-scene-host {
+      background-color: #F8FAFC !important;
     }
 
     #loading-indicator {
-      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s ease;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 100%;
+      height: 100%;
+      min-height: 100vh;
+      background: linear-gradient(to bottom, #F3F7FA, #FAFCFD, #EDF6F2);
+      transition: opacity 0.15s ease-out;
+      will-change: opacity;
     }
+
     #loading-indicator.fade-out {
       opacity: 0;
-      visibility: hidden;
       pointer-events: none;
     }
 
-    /* Completely suppress browser & Tailwind blue focus outline box on Flutter text inputs */
+    /* Force Flutter web canvas container to share identical design background */
+    flutter-view, flt-glass-pane, flt-scene-host {
+      background-color: #F8FAFC !important;
+    }
+
+    .orbs-wrapper {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .orb-1 {
+      position: absolute;
+      top: -6rem;
+      left: -5rem;
+      width: 20rem;
+      height: 20rem;
+      border-radius: 9999px;
+      background: rgba(110, 231, 183, 0.3);
+      filter: blur(75px);
+      animation: subtleDrift 8s ease-in-out infinite;
+    }
+
+    .orb-2 {
+      position: absolute;
+      top: 33%;
+      right: -6rem;
+      width: 22rem;
+      height: 22rem;
+      border-radius: 9999px;
+      background: rgba(153, 246, 228, 0.35);
+      filter: blur(85px);
+      animation: pulseGlow 3.5s ease-in-out infinite;
+    }
+
+    .orb-3 {
+      position: absolute;
+      bottom: -6rem;
+      left: 25%;
+      width: 18rem;
+      height: 18rem;
+      border-radius: 9999px;
+      background: rgba(167, 243, 208, 0.25);
+      filter: blur(70px);
+    }
+
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      opacity: 0.035;
+      background-image: radial-gradient(#059669 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    .splash-core {
+      position: relative;
+      z-index: 20;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 1.5rem;
+    }
+
+    .brand-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .logo-container {
+      position: relative;
+      margin-bottom: 1.5rem;
+      animation: floatSoft 4.5s ease-in-out infinite;
+    }
+
+    .logo-glow {
+      position: absolute;
+      inset: -1rem;
+      background: linear-gradient(to top right, #00C076, #6EE7B7);
+      border-radius: 9999px;
+      filter: blur(24px);
+      opacity: 0.4;
+      animation: pulseGlow 3.5s ease-in-out infinite;
+    }
+
+    .logo-card {
+      position: relative;
+      width: 7rem;
+      height: 7rem;
+      border-radius: 1.5rem;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 25px -5px rgba(16, 185, 129, 0.1);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .status-dot-top {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 14px;
+      height: 14px;
+      background-color: #00C076;
+      border-radius: 50%;
+      border: 2.5px solid #FFFFFF;
+    }
+
+    .brand-title {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.025em;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .brand-emerald {
+      color: #00C076;
+    }
+
+    .brand-tagline {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: #94A3B8;
+      margin-top: 0.375rem;
+      margin-bottom: 0;
+    }
+
+    .badge-gateway {
+      margin-top: 0.875rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.875rem;
+      border-radius: 9999px;
+      background: rgba(236, 253, 245, 0.7);
+      border: 1px solid #D1FAE5;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      backdrop-filter: blur(4px);
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #00C076;
+    }
+
+    .badge-text {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #047857;
+      letter-spacing: 0.02em;
+    }
+
+    .progress-section {
+      width: 100%;
+      max-width: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background-color: rgba(226, 232, 240, 0.6);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-bottom: 0.875rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, #00C076, #2DD4BF, #10B981);
+      border-radius: 9999px;
+      width: 80%;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .task-status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #64748B;
+      letter-spacing: 0.02em;
+    }
+
+    .pulse-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #00C076;
+      animation: pulseDot 1.5s ease-in-out infinite;
+    }
+
+    .splash-footer {
+      position: relative;
+      z-index: 20;
+      padding-bottom: 2rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    .footer-label {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #94A3B8;
+    }
+
+    @keyframes spinLoader {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Suppress browser focus outlines on inputs */
     input, textarea, select, [contenteditable],
     flt-text-editing-host input, flt-text-editing-host textarea,
     flutter-view input, flutter-view textarea {
       outline: none !important;
-      outline-width: 0 !important;
-      outline-color: transparent !important;
-      outline-style: none !important;
       border: none !important;
-      border-width: 0 !important;
-      border-color: transparent !important;
       box-shadow: none !important;
-      -webkit-box-shadow: none !important;
-      -moz-box-shadow: none !important;
       background: transparent !important;
-      -webkit-appearance: none !important;
-      -moz-appearance: none !important;
       appearance: none !important;
-      -webkit-tap-highlight-color: transparent !important;
-      --tw-ring-shadow: 0 0 #0000 !important;
-      --tw-ring-offset-shadow: 0 0 #0000 !important;
-      --tw-ring-color: transparent !important;
-      --tw-ring-offset-width: 0px !important;
-    }
-
-    input:focus, textarea:focus, select:focus, [contenteditable]:focus,
-    flt-text-editing-host input:focus, flt-text-editing-host textarea:focus,
-    flutter-view input:focus, flutter-view textarea:focus {
-      outline: none !important;
-      outline-width: 0 !important;
-      outline-color: transparent !important;
-      outline-style: none !important;
-      border: none !important;
-      border-width: 0 !important;
-      border-color: transparent !important;
-      box-shadow: none !important;
-      -webkit-box-shadow: none !important;
-      -moz-box-shadow: none !important;
-      -webkit-tap-highlight-color: transparent !important;
-      --tw-ring-shadow: 0 0 #0000 !important;
-      --tw-ring-offset-shadow: 0 0 #0000 !important;
-      --tw-ring-color: transparent !important;
-      --tw-ring-offset-width: 0px !important;
+      -webkit-appearance: none !important;
     }
 
     *:focus, *:focus-visible {
@@ -154,65 +324,62 @@
     }
   </style>
 </head>
-<body class="bg-[#F8FAFC] text-slate-800 font-sans antialiased m-0 p-0 overflow-hidden select-none selection:bg-brand-mint selection:text-white">
+<body>
 
-  <!-- BEGIN: Full Screen Loading Splash Container -->
-  <div id="loading-indicator" class="fixed inset-0 z-[99999] flex flex-col justify-between w-full h-full min-h-screen bg-gradient-to-b from-[#F3F7FA] via-[#FAFCFD] to-[#EDF6F2]">
+  <!-- Full Screen Loading Splash Container -->
+  <div id="loading-indicator">
     
     <!-- Background Ambient Lighting Orbs -->
-    <div aria-hidden="true" class="absolute inset-0 pointer-events-none overflow-hidden">
-      <div class="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-emerald-300/30 blur-[75px] animate-drift"></div>
-      <div class="absolute top-1/3 -right-24 w-88 h-88 rounded-full bg-teal-200/35 blur-[85px] animate-glow-pulse"></div>
-      <div class="absolute -bottom-24 left-1/4 w-72 h-72 rounded-full bg-emerald-200/25 blur-[70px]"></div>
-      <div class="absolute inset-0 opacity-[0.035] bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:18px_18px]"></div>
+    <div class="orbs-wrapper" aria-hidden="true">
+      <div class="orb-1"></div>
+      <div class="orb-2"></div>
+      <div class="orb-3"></div>
+      <div class="grid-pattern"></div>
     </div>
 
-    <!-- Top Spacing (Clean, No Fake Status Bar) -->
-    <div class="relative z-10 pt-8"></div>
+    <!-- Top Spacing -->
+    <div style="padding-top: 2rem;"></div>
 
     <!-- Main Brand Presentation & Progress Center -->
-    <div class="relative z-20 flex-1 flex flex-col items-center justify-center px-6" data-purpose="splash-loading-core">
-      <section class="flex flex-col items-center text-center mb-6" data-purpose="brand-presentation">
-        <div class="relative mb-6 animate-float">
-          <div class="absolute -inset-4 bg-gradient-to-tr from-brand-emerald to-emerald-300 rounded-full blur-2xl opacity-40 animate-glow-pulse"></div>
-          <div class="relative w-28 h-28 rounded-3xl bg-white/90 border border-white/80 p-4 flex items-center justify-center shadow-xl shadow-emerald-500/10 backdrop-blur-md">
-            <svg class="w-18 h-18 text-brand-emerald drop-shadow-sm" fill="none" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
-              <path class="text-[#00C076]" d="M52 14H24C16.268 14 10 20.268 10 28C10 33.4357 13.0844 38.1561 17.6256 40.4852L14.5 53.5L27.8767 47.9264C29.8398 48.6186 31.8741 49 34 49H52C59.732 49 66 42.732 66 35V28C66 20.268 59.732 14 52 14Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"></path>
-              <path class="text-[#00C076]/70" d="M22 28C22 30.5 23.5 32.5 25 33.5" stroke="currentColor" stroke-linecap="round" stroke-width="2.5"></path>
-              <path class="text-[#00C076]" d="M38 18L26 35H37L33 49L49 31H37L43 18H38Z" fill="currentColor"></path>
+    <div class="splash-core">
+      <section class="brand-section">
+        <div class="logo-container">
+          <div class="logo-glow"></div>
+          <div class="logo-card">
+            <svg style="width: 4.5rem; height: 4.5rem; color: #00C076;" fill="none" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+              <path class="text-[#00C076]" d="M52 14H24C16.268 14 10 20.268 10 28C10 33.4357 13.0844 38.1561 17.6256 40.4852L14.5 53.5L27.8767 47.9264C29.8398 48.6186 31.8741 49 34 49H52C59.732 49 66 42.732 66 35V28C66 20.268 59.732 14 52 14Z" stroke="#00C076" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"></path>
+              <path d="M22 28C22 30.5 23.5 32.5 25 33.5" stroke="#00C076" stroke-linecap="round" stroke-width="2.5"></path>
+              <path d="M38 18L26 35H37L33 49L49 31H37L43 18H38Z" fill="#00C076"></path>
             </svg>
-            <span class="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
-            </span>
+            <span class="status-dot-top"></span>
           </div>
         </div>
-        <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-0.5">
-          <span>Quicke</span><span class="text-brand-emerald">App</span>
+        <h1 class="brand-title">
+          <span>Quicke</span><span class="brand-emerald">App</span>
         </h1>
-        <p class="text-[11px] sm:text-xs font-bold uppercase tracking-[0.22em] text-slate-400 mt-1.5">Sell Smarter, Grow Faster.</p>
-        <div class="mt-3.5 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50/70 border border-emerald-100 shadow-sm backdrop-blur-sm">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          <span class="text-[11px] font-medium text-emerald-700 tracking-wide">Cloud Gateway Connected</span>
+        <p class="brand-tagline">Sell Smarter, Grow Faster.</p>
+        <div class="badge-gateway">
+          <span class="badge-dot"></span>
+          <span class="badge-text">Cloud Gateway Connected</span>
         </div>
       </section>
 
-      <!-- Frosted Glass POS Loading Bar -->
-      <div class="w-full max-w-[280px] sm:max-w-[320px] flex flex-col items-center mt-4" data-purpose="minimal-progress">
-        <div class="w-full h-1.5 bg-slate-200/60 rounded-full overflow-hidden relative mb-4">
-          <div id="progress-fill-bar" class="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full relative overflow-hidden w-2/3 animate-pulse transition-all duration-500"></div>
+      <!-- Minimal Progress Bar -->
+      <div class="progress-section">
+        <div class="progress-track">
+          <div id="progress-fill-bar" class="progress-fill"></div>
         </div>
-        <div class="flex items-center gap-2 text-xs font-medium text-slate-500 tracking-wide">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-          <span id="active-task-desc">Starting QuickeApp POS...</span>
+        <div class="task-status-row">
+          <span class="pulse-indicator"></span>
+          <span id="active-task-desc">Launching POS Terminal...</span>
         </div>
       </div>
     </div>
 
     <!-- Security Signature Footer -->
-    <footer class="relative z-20 pb-8 px-6 flex flex-col items-center justify-center text-center select-none" data-purpose="mobile-footer">
-      <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24">
+    <footer class="splash-footer">
+      <div class="footer-label">
+        <svg style="width: 14px; height: 14px; color: #059669;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           <path d="m9 12 2 2 4-4"></path>
         </svg>
@@ -220,80 +387,33 @@
       </div>
     </footer>
   </div>
-  <!-- END: Full Screen Loading Splash Container -->
 
-  <!-- Seamless Direct Transition Controller (Zero White Screen Flash) -->
-  <script data-purpose="seamless-splash-dismissal">
-    // Progress indicator animation
+  <!-- Direct Transition Controller -->
+  <script>
     document.addEventListener('DOMContentLoaded', () => {
       const progressBar = document.getElementById('progress-fill-bar');
-      const activeTask = document.getElementById('active-task-desc');
-
-      const dynamicSteps = [
-        { progress: 75, text: 'Syncing Terminal Prefs (LKR)...' },
-        { progress: 90, text: 'Validating Terminal Security...' },
-        { progress: 100, text: 'Launching POS Terminal...' }
-      ];
-
-      let stepIndex = 0;
-      const progressInterval = setInterval(() => {
-        if (stepIndex < dynamicSteps.length) {
-          const step = dynamicSteps[stepIndex];
-          if (progressBar) progressBar.style.width = `${step.progress}%`;
-          if (activeTask) activeTask.innerText = step.text;
-          stepIndex++;
-        } else {
-          clearInterval(progressInterval);
-        }
-      }, 500);
+      if (progressBar) progressBar.style.width = '100%';
     });
 
-    // Dismiss splash ONLY when Flutter's first screen is fully painted (direct transition to login)
+    let isSplashDismissed = false;
     window.dismissSplash = function() {
+      if (isSplashDismissed) return;
+      isSplashDismissed = true;
       const el = document.getElementById('loading-indicator');
-      if (el && !el.classList.contains('fade-out')) {
+      if (el) {
         el.classList.add('fade-out');
         setTimeout(() => {
           if (el && el.parentNode) el.parentNode.removeChild(el);
-        }, 400);
+        }, 120);
       }
     };
 
-    // 1. Hook Flutter first frame event (Standard Flutter Web event)
-    window.addEventListener('flutter-first-frame', () => {
-      // Extra frame delay ensures the GPU buffer has actually painted onto the screen
-      requestAnimationFrame(() => {
-        setTimeout(window.dismissSplash, 80);
-      });
-    });
+    window.dismissPreloader = function() {};
 
-    // 2. DOM Observer: Watch for Flutter view & canvas mounting
-    let splashDismissed = false;
-    const flutterObserver = new MutationObserver((mutations, observer) => {
-      const fltView = document.querySelector('flutter-view') || 
-                      document.querySelector('flt-glass-pane') ||
-                      document.querySelector('flt-scene-host');
-      if (fltView && !splashDismissed) {
-        // Wait until Flutter canvas or scene is populated
-        const waitForRender = () => {
-          const hasCanvas = document.querySelector('canvas') || fltView.children.length > 0;
-          if (hasCanvas) {
-            splashDismissed = true;
-            observer.disconnect();
-            setTimeout(window.dismissSplash, 220);
-          } else {
-            requestAnimationFrame(waitForRender);
-          }
-        };
-        requestAnimationFrame(waitForRender);
-      }
-    });
-    flutterObserver.observe(document.body, { childList: true, subtree: true });
-
-    // 3. Fallback safety timeout
+    // Fallback safety only: if Flutter takes unusually long, auto-dismiss after 4.5s
     setTimeout(() => {
       window.dismissSplash();
-    }, 6000);
+    }, 4500);
   </script>
 
   <!-- Flutter Web Bootstrapper -->

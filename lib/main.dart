@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'screens/login_screen.dart';
 import 'screens/pos_screen.dart';
 import 'screens/store_setup_screen.dart';
@@ -8,8 +7,10 @@ import 'services/api_service.dart';
 import 'services/offline_sync_service.dart';
 import 'services/notification_service.dart';
 import 'services/permission_service.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'services/security_check_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/web_splash_helper.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -27,11 +28,19 @@ void main() async {
     );
   };
 
-  await NotificationService().initialize();
-  await PermissionService().requestAllAppPermissions();
-  OfflineSyncService().startPeriodicSync();
-
+  // 3. Fast launch: mount app UI immediately without blocking on peripheral services
   runApp(PosApp(isDeviceSecure: isDeviceSecure));
+
+  // 4. Concurrently initialize non-critical services in background
+  Future.microtask(() async {
+    try {
+      await NotificationService().initialize();
+      await PermissionService().requestAllAppPermissions();
+      OfflineSyncService().startPeriodicSync();
+    } catch (e) {
+      debugPrint('Background init error: $e');
+    }
+  });
 }
 
 class PosApp extends StatelessWidget {
@@ -47,6 +56,156 @@ class PosApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       home: isDeviceSecure ? const AuthCheckWrapper() : const DeviceCompromisedScreen(),
     );
+  }
+}
+
+class AuthCheckWrapper extends StatefulWidget {
+  const AuthCheckWrapper({super.key});
+
+  @override
+  State<AuthCheckWrapper> createState() => _AuthCheckWrapperState();
+}
+
+class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
+  final ApiService _apiService = ApiService();
+  bool _isChecking = true;
+  bool _isLoggedIn = false;
+  bool _isStoreSetupDone = true;
+  String _userEmail = '';
+  String _storeName = 'POS STORE';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSavedSession();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      removeWebSplash();
+    });
+  }
+
+  Future<void> _checkSavedSession() async {
+    try {
+      final token = await _apiService.getToken();
+      if (token != null && token.isNotEmpty) {
+        final userInfo = await _apiService.getUserInfo();
+        if (userInfo != null && userInfo.isNotEmpty && (userInfo['email'] ?? '').toString().isNotEmpty) {
+          final role = (userInfo['role'] ?? '').toString().toLowerCase();
+          final isStaff = role.contains('cashier') || role.contains('staff') || role.contains('employee');
+          final storeName = (userInfo['store_name'] ?? '').toString().trim();
+          final email = (userInfo['email'] ?? '').toString().trim();
+
+          // INSTANT check: if user already has an active store name, onboarding is complete!
+          // This avoids waiting for slow network timeouts or remote API calls on refresh.
+          final hasValidStore = storeName.isNotEmpty &&
+              storeName != 'Admin Store' &&
+              storeName != 'User Store' &&
+              storeName != 'POS STORE';
+
+          bool setupDone = isStaff || hasValidStore;
+          if (!setupDone) {
+            setupDone = await _apiService.isStoreSetupCompleted();
+          }
+
+          if (!mounted) return;
+          setState(() {
+            _isLoggedIn = true;
+            _userEmail = email;
+            _storeName = storeName.isNotEmpty ? storeName : 'POS STORE';
+            _isStoreSetupDone = setupDone;
+            _isChecking = false;
+          });
+
+          // Dismiss splash as soon as session is restored and first frame paints
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            removeWebSplash();
+          });
+          return;
+        } else {
+          await _apiService.clearToken();
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _isLoggedIn = false;
+      _isChecking = false;
+    });
+
+    // Dismiss splash when switching to login
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      removeWebSplash();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. While reading saved session credentials, display clean branded loader (NO blank white screen!)
+    if (_isChecking) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00C076).withOpacity(0.12),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFF00C076).withOpacity(0.15)),
+                ),
+                padding: const EdgeInsets.all(14),
+                child: const CircularProgressIndicator(
+                  strokeWidth: 3.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00C076)),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Connecting to POS Terminal...',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF475569),
+                  letterSpacing: 0.02,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. User is logged in: direct them immediately to the active POS or Setup Screen
+    if (_isLoggedIn) {
+      if (!_isStoreSetupDone) {
+        return StoreSetupScreen(
+          userEmail: _userEmail,
+          initialStoreName: (_storeName.isNotEmpty &&
+                  _storeName != 'POS STORE' &&
+                  _storeName != 'Admin Store' &&
+                  _storeName != 'User Store')
+              ? _storeName
+              : '',
+        );
+      }
+      return PosScreen(
+        userEmail: _userEmail,
+        storeName: _storeName,
+      );
+    }
+
+    // 3. Not logged in: directly render LoginScreen
+    return const LoginScreen();
   }
 }
 
@@ -121,290 +280,3 @@ class DeviceCompromisedScreen extends StatelessWidget {
   }
 }
 
-class AuthCheckWrapper extends StatefulWidget {
-  const AuthCheckWrapper({super.key});
-
-  @override
-  State<AuthCheckWrapper> createState() => _AuthCheckWrapperState();
-}
-
-class _AuthCheckWrapperState extends State<AuthCheckWrapper> {
-  final ApiService _apiService = ApiService();
-  bool _isLoading = true;
-  bool _isLoggedIn = false;
-  bool _isStoreSetupDone = true;
-  String _userEmail = '';
-  String _storeName = 'POS STORE';
-
-  @override
-  void initState() {
-    super.initState();
-    _checkSavedSession();
-  }
-
-  Future<void> _checkSavedSession() async {
-    try {
-      final token = await _apiService.getToken();
-      if (token != null && token.isNotEmpty) {
-        final userInfo = await _apiService.getUserInfo();
-        if (userInfo != null && userInfo.isNotEmpty && (userInfo['email'] ?? '').toString().isNotEmpty) {
-          _isLoggedIn = true;
-          _userEmail = userInfo['email']?.toString() ?? '';
-          _storeName = userInfo['store_name']?.toString() ?? 'POS STORE';
-
-          final role = (userInfo['role'] ?? '').toString().toLowerCase();
-          final isStaff = role.contains('cashier') || role.contains('staff') || role.contains('employee');
-
-          if (!isStaff) {
-            _isStoreSetupDone = await _apiService.isStoreSetupCompleted();
-          } else {
-            _isStoreSetupDone = true;
-          }
-        } else {
-          // Orphaned token without valid user profile -> clear session
-          await _apiService.clearToken();
-          _isLoggedIn = false;
-        }
-      } else {
-        _isLoggedIn = false;
-      }
-    } catch (_) {
-      _isLoggedIn = false;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const TerminalInitializingScreen();
-    }
-
-    if (_isLoggedIn) {
-      if (!_isStoreSetupDone) {
-        return StoreSetupScreen(
-          userEmail: _userEmail,
-          initialStoreName: (_storeName.isNotEmpty &&
-                  _storeName != 'POS STORE' &&
-                  _storeName != 'Admin Store' &&
-                  _storeName != 'User Store')
-              ? _storeName
-              : '',
-        );
-      }
-      return PosScreen(
-        userEmail: _userEmail,
-        storeName: _storeName,
-      );
-    }
-
-    return const LoginScreen();
-  }
-}
-
-/// Modern Emerald / Mint Terminal Initializing Screen (Mirrors Web Splash Screen)
-class TerminalInitializingScreen extends StatelessWidget {
-  const TerminalInitializingScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF3F7FA), Color(0xFFFAFCFD), Color(0xFFEDF6F2)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const SizedBox(height: 10),
-              // Brand Presentation & Progress Core
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Emerald Glow Icon Box
-                  Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.92),
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(color: Colors.white, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00C076).withOpacity(0.25),
-                          blurRadius: 30,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(18),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Center(
-                          child: Icon(Icons.flash_on_rounded, size: 52, color: Color(0xFF00C076)),
-                        ),
-                        Positioned(
-                          top: -6,
-                          right: -6,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00C076),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2.5),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  // App Brand Title
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Quicke',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'App',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF00C076),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'SELL SMARTER, GROW FASTER.',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF94A3B8),
-                      letterSpacing: 2.2,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Cloud Gateway Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5).withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFA7F3D0)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF00C076),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Cloud Gateway Connected',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF047857),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 38),
-                  // Animated Progress Bar
-                  Container(
-                    width: 240,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: const LinearProgressIndicator(
-                        backgroundColor: Color(0xFFE2E8F0),
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00C076)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF00C076),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        'Starting QuickeApp POS...',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              // Security Signature Footer
-              Padding(
-                padding: const EdgeInsets.only(bottom: 18.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.shield_outlined, size: 14, color: Color(0xFF059669)),
-                    const SizedBox(width: 5),
-                    Text(
-                      'End-to-End Encrypted POS System',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

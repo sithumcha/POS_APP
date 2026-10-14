@@ -131,12 +131,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // Retrieve store branding details (logo, store name) from CMS
           final branding = await _apiService.getStoreBranding();
           final String brandingStoreName = (branding['store_name'] ?? '').toString().trim();
-          final String userStoreName = (userDetail['store_name'] ?? '').toString().trim();
-          final String effectiveStoreName = brandingStoreName.isNotEmpty
+          final String userStoreName = (userDetail['store_name'] ?? userObj['store_name'] ?? '').toString().trim();
+          final String adminStoreName = (await _apiService.getAdminStoreName()).trim();
+          final String effectiveStoreName = brandingStoreName.isNotEmpty && brandingStoreName != 'Admin Store' && brandingStoreName != 'User Store'
               ? brandingStoreName
-              : (userStoreName.isNotEmpty
-                  ? userStoreName
-                  : (isStaff ? 'QUICKE POS Store' : '$displayName Store'));
+              : (adminStoreName.isNotEmpty
+                  ? adminStoreName
+                  : (userStoreName.isNotEmpty && userStoreName != 'Admin Store' && userStoreName != 'User Store'
+                      ? userStoreName
+                      : (isStaff ? 'POS Terminal' : '$displayName Store')));
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -374,8 +377,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       // --- 1. HERO BRAND HEADER (Animated Logo & Typography) ---
                       // =========================================================
                       FadeSlideEntrance(
-                        delay: const Duration(milliseconds: 50),
-                        offset: const Offset(0.0, -0.06),
+                        delay: Duration.zero,
+                        duration: const Duration(milliseconds: 200),
+                        offset: const Offset(0.0, -0.04),
                         child: Column(
                           children: [
                             AnimatedBuilder(
@@ -439,8 +443,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       // --- 2. MAIN INTERACTIVE CARD CONTAINER ---
                       // =========================================================
                       FadeSlideEntrance(
-                        delay: const Duration(milliseconds: 140),
-                        offset: const Offset(0.0, 0.08),
+                        delay: Duration.zero,
+                        duration: const Duration(milliseconds: 200),
+                        offset: const Offset(0.0, 0.04),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
                           decoration: BoxDecoration(

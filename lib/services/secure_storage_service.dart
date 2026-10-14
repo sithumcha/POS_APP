@@ -69,8 +69,13 @@ class SecureStorageService {
     return await _storage.read(key: _keyUserRole);
   }
 
-  /// Clear all credentials and session state on logout or 401 expiry
+  /// Clear active auth credentials and session state on logout or 401 expiry.
+  /// Preserves persistent merchant store branding, preferences, and offline data!
   static Future<void> clearSession() async {
-    await _storage.deleteAll();
+    await _storage.delete(key: _keyToken);
+    await _storage.delete(key: _keyLegacyJwt);
+    await _storage.delete(key: _keyUserId);
+    await _storage.delete(key: _keyUserType);
+    await _storage.delete(key: _keyUserRole);
   }
 }

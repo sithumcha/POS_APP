@@ -72,10 +72,12 @@ class ApiService {
 
   Future<String?> getToken() async {
     if (_cachedToken != null && _cachedToken!.isNotEmpty) return _cachedToken;
-    _cachedToken = await SecureStorageService.getToken();
-    if (_cachedToken == null || _cachedToken!.isEmpty) {
-      _cachedToken = await _storage.read(key: 'jwt_token');
+    final token = await _storage.read(key: 'jwt_token') ?? await _storage.read(key: 'auth_token');
+    if (token != null && token.isNotEmpty) {
+      _cachedToken = token.replaceAll(RegExp(r'[\r\n\t\s]+'), '');
+      return _cachedToken;
     }
+    _cachedToken = await SecureStorageService.getToken();
     return _cachedToken;
   }
 
@@ -136,6 +138,7 @@ class ApiService {
 
   Future<void> clearToken() async {
     _cachedToken = null;
+    _cachedUserInfo = null;
     _cachedHeaders = null;
     invalidateCatalogCache();
     await SecureStorageService.clearSession();
@@ -143,11 +146,12 @@ class ApiService {
     await _storage.delete(key: 'user_info');
     await _storage.delete(key: 'owner_merchant_token');
     await _storage.delete(key: 'owner_merchant_id');
+    // Wipe legacy global shared keys so they never cross-contaminate between different admins
     await _storage.delete(key: 'store_branding');
-    await _storage.delete(key: 'cached_cms_content');
+    await _storage.delete(key: 'admin_store_branding');
+    await _storage.delete(key: 'admin_store_name');
     await _storage.delete(key: 'user_edited_profile');
-    await _storage.delete(key: 'store_setup_completed');
-    await _storage.delete(key: 'store_setup_draft');
+    await _storage.delete(key: 'pos_setup_draft');
   }
 
   Future<Map<String, String>> _headers() async {
@@ -198,14 +202,20 @@ class ApiService {
     }
   }
 
-  Future<void> saveUserInfo(Map<String, dynamic> userInfo) async =>
-      await _storage.write(key: 'user_info', value: jsonEncode(userInfo));
+  static Map<String, dynamic>? _cachedUserInfo;
+
+  Future<void> saveUserInfo(Map<String, dynamic> userInfo) async {
+    _cachedUserInfo = userInfo;
+    await _storage.write(key: 'user_info', value: jsonEncode(userInfo));
+  }
 
   Future<Map<String, dynamic>?> getUserInfo() async {
+    if (_cachedUserInfo != null) return _cachedUserInfo;
     final str = await _storage.read(key: 'user_info');
     if (str != null && str.isNotEmpty) {
       try {
-        return jsonDecode(str) as Map<String, dynamic>;
+        _cachedUserInfo = jsonDecode(str) as Map<String, dynamic>;
+        return _cachedUserInfo;
       } catch (_) {}
     }
     return null;
@@ -214,8 +224,8 @@ class ApiService {
   /// Determines whether currently logged-in account is a Staff Member / Cashier.
   /// Type 1 (Super Admin) & Type 2 (Store Owner) -> false (Admin)
   /// Type 3 or accounts having a valid parent_id -> true (Staff)
-  Future<bool> isStaffUser() async {
-    final user = await getUserInfo();
+  Future<bool> isStaffUser([Map<String, dynamic>? userMap]) async {
+    final user = userMap ?? (await getUserInfo());
     if (user == null) return false;
     final userType = int.tryParse(user['user_type']?.toString() ?? '');
     if (userType == 1 || userType == 2 || user['is_owner'] == true) {
@@ -231,6 +241,30 @@ class ApiService {
         parentId.toString().toLowerCase() != 'null';
     final rawRole = (user['role'] ?? '').toString().trim().toLowerCase();
     return hasParent || rawRole == 'staff' || rawRole == 'cashier';
+  }
+
+  /// Returns the master Store Owner / Admin's store name for inheritance across all staff users
+  Future<String> getAdminStoreName() async {
+    try {
+      final ownerId = await getEffectiveStoreOwnerId();
+      if (ownerId.isNotEmpty) {
+        final name = await _storage.read(key: 'admin_store_name_$ownerId');
+        if (name != null && name.trim().isNotEmpty && name != 'Admin Store' && name != 'User Store') {
+          return name.trim();
+        }
+        final raw = await _storage.read(key: 'store_branding_$ownerId');
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = _safeJsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            final bName = (decoded['store_name'] ?? '').toString().trim();
+            if (bName.isNotEmpty && bName != 'Admin Store' && bName != 'User Store') {
+              return bName;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return '';
   }
 
   /// Returns the unique store owner identifier (owner user id or parent_id for staff)
@@ -252,21 +286,33 @@ class ApiService {
     return email;
   }
 
-  Future<void> saveUserEditedProfile(Map<String, dynamic> editedData) async {
+  Future<void> saveUserEditedProfile(Map<String, dynamic> editedData, {String? email, String? userId}) async {
     try {
       final currentUser = await getUserInfo();
-      final uId = currentUser?['id']?.toString() ?? currentUser?['email']?.toString() ?? '';
-      if (uId.isNotEmpty) {
-        await _storage.write(key: 'user_edited_profile_$uId', value: jsonEncode(editedData));
+      final id = userId ?? currentUser?['id']?.toString() ?? '';
+      final em = (email ?? currentUser?['email'] ?? editedData['email'] ?? '').toString().trim().toLowerCase();
+      if (id.isNotEmpty) {
+        await _storage.write(key: 'user_edited_profile_$id', value: jsonEncode(editedData));
       }
-      await _storage.write(key: 'user_edited_profile', value: jsonEncode(editedData));
+      if (em.isNotEmpty) {
+        await _storage.write(key: 'user_edited_profile_$em', value: jsonEncode(editedData));
+      }
     } catch (_) {}
   }
 
-  Future<Map<String, dynamic>?> getUserEditedProfile() async {
+  Future<Map<String, dynamic>?> getUserEditedProfile({String? userKey}) async {
     try {
+      if (userKey != null && userKey.trim().isNotEmpty) {
+        final keyStr = userKey.trim().toLowerCase();
+        final str = await _storage.read(key: 'user_edited_profile_$keyStr');
+        if (str != null && str.isNotEmpty) {
+          final decoded = _safeJsonDecode(str);
+          if (decoded is Map<String, dynamic>) return decoded;
+        }
+      }
       final currentUser = await getUserInfo();
-      final uId = currentUser?['id']?.toString() ?? currentUser?['email']?.toString() ?? '';
+      final uId = currentUser?['id']?.toString() ?? '';
+      final uEmail = (currentUser?['email'] ?? '').toString().trim().toLowerCase();
       if (uId.isNotEmpty) {
         final str = await _storage.read(key: 'user_edited_profile_$uId');
         if (str != null && str.isNotEmpty) {
@@ -274,10 +320,12 @@ class ApiService {
           if (decoded is Map<String, dynamic>) return decoded;
         }
       }
-      final str = await _storage.read(key: 'user_edited_profile');
-      if (str != null && str.isNotEmpty) {
-        final decoded = _safeJsonDecode(str);
-        if (decoded is Map<String, dynamic>) return decoded;
+      if (uEmail.isNotEmpty) {
+        final str = await _storage.read(key: 'user_edited_profile_$uEmail');
+        if (str != null && str.isNotEmpty) {
+          final decoded = _safeJsonDecode(str);
+          if (decoded is Map<String, dynamic>) return decoded;
+        }
       }
     } catch (_) {}
     return null;
@@ -288,7 +336,15 @@ class ApiService {
   /// GET /users/detail (Get logged-in user profile details)
   Future<Map<String, dynamic>> getUserDetail() async {
     final savedUser = (await getUserInfo()) ?? {};
-    final editedOverlay = (await getUserEditedProfile()) ?? {};
+    final currentUserId = savedUser['id']?.toString() ?? '';
+    final currentUserEmail = (savedUser['email'] ?? '').toString().trim().toLowerCase();
+    final editedOverlay = (currentUserId.isNotEmpty
+            ? await getUserEditedProfile(userKey: currentUserId)
+            : null) ??
+        (currentUserEmail.isNotEmpty
+            ? await getUserEditedProfile(userKey: currentUserEmail)
+            : null) ??
+        {};
 
     try {
       final headers = await _headers();
@@ -318,20 +374,43 @@ class ApiService {
             merged['last_name'] = savedUser['last_name'];
           }
 
-          if (editedOverlay['store_name'] != null && editedOverlay['store_name'].toString().isNotEmpty) {
-            merged['store_name'] = editedOverlay['store_name'];
-          } else if (merged['store_name'] == null || merged['store_name'].toString().isEmpty) {
-            final fName = (merged['first_name'] ?? '').toString();
-            if (fName.isNotEmpty) {
-              merged['store_name'] = '$fName Store';
+          final isStaff = await isStaffUser(merged);
+          if (isStaff) {
+            merged['is_owner'] = false;
+            final adminName = await getAdminStoreName();
+            if (adminName.isNotEmpty) {
+              merged['store_name'] = adminName;
+            } else {
+              final branding = await getStoreBranding();
+              final bName = (branding['store_name'] ?? '').toString().trim();
+              if (bName.isNotEmpty && bName != 'Admin Store' && bName != 'User Store') {
+                merged['store_name'] = bName;
+              }
+            }
+          } else {
+            if (editedOverlay['store_name'] != null && editedOverlay['store_name'].toString().isNotEmpty) {
+              merged['store_name'] = editedOverlay['store_name'];
+            } else if (merged['store_name'] == null || merged['store_name'].toString().isEmpty) {
+              final fName = (merged['first_name'] ?? '').toString();
+              if (fName.isNotEmpty) {
+                merged['store_name'] = '$fName Store';
+              }
             }
           }
 
+          // Restore logo_url from local cache so server nulls don't erase uploaded store image
+          final savedLogo = (editedOverlay['logo_url'] ?? savedUser['logo_url'] ?? '').toString().trim();
+          if (savedLogo.isNotEmpty && (merged['logo_url'] == null || merged['logo_url'].toString().isEmpty)) {
+            merged['logo_url'] = savedLogo;
+            merged['image'] = savedLogo;
+            merged['avatar'] = savedLogo;
+          }
+
           final parentId = merged['parent_id'];
-          final bool isSubUser = parentId != null &&
+          final bool isSubUser = isStaff || (parentId != null &&
               parentId.toString().isNotEmpty &&
               parentId.toString() != '0' &&
-              parentId.toString().toLowerCase() != 'null';
+              parentId.toString().toLowerCase() != 'null');
           if (!isSubUser) {
             merged['is_owner'] = true;
             if (merged['role'] == null ||
@@ -354,8 +433,35 @@ class ApiService {
     if (editedOverlay['last_name'] != null && editedOverlay['last_name'].toString().isNotEmpty) {
       mergedSaved['last_name'] = editedOverlay['last_name'];
     }
-    if (editedOverlay['store_name'] != null && editedOverlay['store_name'].toString().isNotEmpty) {
-      mergedSaved['store_name'] = editedOverlay['store_name'];
+
+    final isStaffFallback = await isStaffUser(mergedSaved);
+    if (isStaffFallback) {
+      mergedSaved['is_owner'] = false;
+      final adminName = await getAdminStoreName();
+      if (adminName.isNotEmpty) {
+        mergedSaved['store_name'] = adminName;
+      } else {
+        final branding = await getStoreBranding();
+        final bName = (branding['store_name'] ?? '').toString().trim();
+        if (bName.isNotEmpty && bName != 'Admin Store' && bName != 'User Store') {
+          mergedSaved['store_name'] = bName;
+        }
+      }
+    } else {
+      if (editedOverlay['store_name'] != null && editedOverlay['store_name'].toString().isNotEmpty) {
+        mergedSaved['store_name'] = editedOverlay['store_name'];
+      }
+      if ((mergedSaved['store_name'] == null || mergedSaved['store_name'].toString().isEmpty)) {
+        final fName = (mergedSaved['first_name'] ?? '').toString();
+        if (fName.isNotEmpty) {
+          mergedSaved['store_name'] = '$fName Store';
+        }
+      }
+    }
+    if (editedOverlay['logo_url'] != null && editedOverlay['logo_url'].toString().isNotEmpty) {
+      mergedSaved['logo_url'] = editedOverlay['logo_url'];
+      mergedSaved['image'] = editedOverlay['logo_url'];
+      mergedSaved['avatar'] = editedOverlay['logo_url'];
     }
 
     if (mergedSaved.isNotEmpty) {
@@ -406,7 +512,10 @@ class ApiService {
             userObj['last_name'] = 'User';
           }
 
-          final editedOverlay = await getUserEditedProfile();
+          final userIdStr = userObj['id']?.toString() ?? '';
+          final editedOverlay = await getUserEditedProfile(userKey: cleanEmail) ??
+              (userIdStr.isNotEmpty ? await getUserEditedProfile(userKey: userIdStr) : null);
+
           if (editedOverlay != null && editedOverlay.isNotEmpty) {
             final editedEmail = (editedOverlay['email'] ?? '').toString().trim().toLowerCase();
             if (editedEmail.isEmpty || editedEmail == cleanEmail) {
@@ -419,14 +528,52 @@ class ApiService {
               if (editedOverlay['store_name'] != null && editedOverlay['store_name'].toString().isNotEmpty) {
                 userObj['store_name'] = editedOverlay['store_name'];
               }
+              if (editedOverlay['logo_url'] != null && editedOverlay['logo_url'].toString().isNotEmpty) {
+                userObj['logo_url'] = editedOverlay['logo_url'];
+                userObj['image'] = editedOverlay['logo_url'];
+                userObj['avatar'] = editedOverlay['logo_url'];
+              }
             }
           }
 
+          // Also check store branding scoped strictly to this merchant
+          final brandingKeys = [
+            if (userIdStr.isNotEmpty) 'store_branding_$userIdStr',
+            'store_branding_$cleanEmail',
+          ];
+          for (final key in brandingKeys) {
+            try {
+              final raw = await _storage.read(key: key);
+              if (raw != null && raw.isNotEmpty) {
+                final decoded = _safeJsonDecode(raw);
+                if (decoded is Map<String, dynamic>) {
+                  final bLogo = (decoded['logo_url'] ?? '').toString().trim();
+                  if (bLogo.isNotEmpty && (userObj['logo_url'] == null || userObj['logo_url'].toString().isEmpty)) {
+                    userObj['logo_url'] = bLogo;
+                    userObj['image'] = bLogo;
+                    userObj['avatar'] = bLogo;
+                  }
+                  final bStore = (decoded['store_name'] ?? '').toString().trim();
+                  if (bStore.isNotEmpty && bStore != 'Admin Store' && bStore != 'User Store') {
+                    userObj['store_name'] = bStore;
+                  }
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+
           final parentId = userObj['parent_id'];
-          final bool isSubUser = parentId != null &&
-              parentId.toString().isNotEmpty &&
-              parentId.toString() != '0' &&
-              parentId.toString().toLowerCase() != 'null';
+          final int? userTypeVal = int.tryParse((userObj['user_type'] ?? '').toString());
+          final rawRole = (userObj['role'] ?? '').toString().trim().toLowerCase();
+          final bool isSubUser = userTypeVal == 3 ||
+              rawRole == 'staff' ||
+              rawRole == 'cashier' ||
+              (parentId != null &&
+                  parentId.toString().isNotEmpty &&
+                  parentId.toString() != '0' &&
+                  parentId.toString().toLowerCase() != 'null');
+
           if (!isSubUser) {
             userObj['is_owner'] = true;
             if (userObj['role'] == null ||
@@ -438,12 +585,45 @@ class ApiService {
             if (userObj['id'] != null) {
               await _storage.write(key: _keyOwnerMerchantId, value: userObj['id'].toString());
             }
+            final ownerStoreName = (userObj['store_name'] ?? '').toString().trim();
+            if (ownerStoreName.isNotEmpty && ownerStoreName != 'Admin Store' && ownerStoreName != 'User Store') {
+              if (userObj['id'] != null) {
+                await _storage.write(key: 'admin_store_name_${userObj['id']}', value: ownerStoreName);
+                await _storage.write(key: 'store_setup_completed_${userObj['id']}', value: 'true');
+              }
+              await _storage.write(key: 'store_setup_completed', value: 'true');
+            }
           } else {
             // Staff / Cashier member: inherit Store Owner's store name and branding
-            final branding = await getStoreBranding();
-            final brandingStore = (branding['store_name'] ?? '').toString().trim();
-            if (brandingStore.isNotEmpty) {
-              userObj['store_name'] = brandingStore;
+            userObj['role'] = 'Staff Member';
+            userObj['is_owner'] = false;
+
+            // Inherit Admin Store Name
+            String inheritedStoreName = await getAdminStoreName();
+            if (inheritedStoreName.isEmpty) {
+              final localStaff = await getLocalStaffMembers();
+              for (var s in localStaff) {
+                if ((s['email'] ?? '').toString().trim().toLowerCase() == cleanEmail) {
+                  inheritedStoreName = (s['store_name'] ?? '').toString().trim();
+                  break;
+                }
+              }
+            }
+            if (inheritedStoreName.isEmpty) {
+              final branding = await getStoreBranding();
+              inheritedStoreName = (branding['store_name'] ?? '').toString().trim();
+            }
+
+            if (inheritedStoreName.isNotEmpty && inheritedStoreName != 'Admin Store' && inheritedStoreName != 'User Store') {
+              userObj['store_name'] = inheritedStoreName;
+            }
+
+            // Inherit logo if present
+            final adminBranding = await getStoreBranding();
+            final adminLogo = (adminBranding['logo_url'] ?? '').toString().trim();
+            if (adminLogo.isNotEmpty) {
+              userObj['logo_url'] = adminLogo;
+              userObj['image'] = adminLogo;
             }
           }
 
@@ -471,11 +651,16 @@ class ApiService {
           if (staffPass.isEmpty || staffPass == cleanPassword) {
             final mockToken = 'LOCAL-STAFF-TOKEN-${DateTime.now().millisecondsSinceEpoch}';
             await saveToken(mockToken);
-            await saveUserInfo(staff);
+            final staffCopy = Map<String, dynamic>.from(staff);
+            final adminStore = await getAdminStoreName();
+            if (adminStore.isNotEmpty) {
+              staffCopy['store_name'] = adminStore;
+            }
+            await saveUserInfo(staffCopy);
             return {
               'success': true,
               'token': mockToken,
-              'user': staff,
+              'user': staffCopy,
               'message': 'Logged in successfully as Staff!',
             };
           } else {
@@ -809,16 +994,89 @@ class ApiService {
   Future<Map<String, dynamic>> getStoreBranding() async {
     final ownerId = await getEffectiveStoreOwnerId();
     final user = await getUserInfo();
+    final email = (user?['email'] ?? '').toString().trim().toLowerCase();
+    final userId = user?['id']?.toString() ?? '';
     final isStaff = await isStaffUser();
 
-    // 1. Check scoped store branding for THIS specific store owner
-    if (ownerId.isNotEmpty) {
+    // If this is a Staff / Cashier account, ALWAYS prioritize inheriting Store Owner / Admin branding
+    if (isStaff) {
+      // 1. Check admin_store_branding and admin_store_name scoped to this ownerId
+      if (ownerId.isNotEmpty) {
+        try {
+          final adminBrandingStr = await _storage.read(key: 'admin_store_branding_$ownerId');
+          if (adminBrandingStr != null && adminBrandingStr.isNotEmpty) {
+            final decoded = _safeJsonDecode(adminBrandingStr);
+            if (decoded is Map<String, dynamic>) {
+              final bName = (decoded['store_name'] ?? '').toString().trim();
+              final bLogo = (decoded['logo_url'] ?? '').toString().trim();
+              if ((bName.isNotEmpty && bName != 'Admin Store' && bName != 'User Store') || bLogo.isNotEmpty) {
+                return Map<String, dynamic>.from(decoded);
+              }
+            }
+          }
+        } catch (_) {}
+
+        final adminName = await getAdminStoreName();
+        if (adminName.isNotEmpty) {
+          String logo = '';
+          try {
+            final raw = await _storage.read(key: 'store_branding_$ownerId');
+            if (raw != null) {
+              final dec = _safeJsonDecode(raw);
+              if (dec is Map) logo = (dec['logo_url'] ?? '').toString();
+            }
+          } catch (_) {}
+          return {
+            'store_name': adminName,
+            'logo_url': logo,
+            'address': '',
+            'phone': '',
+            'email': '',
+            'whatsapp': '',
+          };
+        }
+      }
+
+      // 2. Check local_staff_members registry for inherited store_name
       try {
-        final local = await _storage.read(key: 'store_branding_$ownerId');
+        final localStaff = await getLocalStaffMembers();
+        for (final s in localStaff) {
+          if ((s['email'] ?? '').toString().trim().toLowerCase() == email) {
+            final sName = (s['store_name'] ?? '').toString().trim();
+            if (sName.isNotEmpty && sName != 'Admin Store' && sName != 'User Store') {
+              return {
+                'store_name': sName,
+                'logo_url': (s['logo_url'] ?? '').toString(),
+                'address': '',
+                'phone': '',
+                'email': '',
+                'whatsapp': '',
+              };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Check scoped store branding across only scoped keys (ownerId, userId, email)
+    // NEVER fall back to a shared/global 'store_branding' key to prevent cross-account pollution!
+    final keysToCheck = [
+      if (ownerId.isNotEmpty) 'store_branding_$ownerId',
+      if (userId.isNotEmpty && userId != ownerId) 'store_branding_$userId',
+      if (email.isNotEmpty) 'store_branding_$email',
+    ];
+
+    for (final key in keysToCheck) {
+      try {
+        final local = await _storage.read(key: key);
         if (local != null && local.isNotEmpty) {
           final decoded = _safeJsonDecode(local);
           if (decoded is Map<String, dynamic>) {
-            return Map<String, dynamic>.from(decoded);
+            final logo = (decoded['logo_url'] ?? '').toString().trim();
+            final name = (decoded['store_name'] ?? '').toString().trim();
+            if (logo.isNotEmpty || (name.isNotEmpty && name != 'Admin Store' && name != 'User Store')) {
+              return Map<String, dynamic>.from(decoded);
+            }
           }
         }
       } catch (_) {}
@@ -869,13 +1127,13 @@ class ApiService {
     final branding = {
       'store_name': (storeName == 'Admin Store' || storeName == 'User Store') ? '' : storeName,
       'logo_url': logoUrl, // Strictly this merchant's logo! Does not leak other admins' photos.
-      'address': '',
-      'phone': '',
+      'address': (user?['address'] ?? '').toString().trim(),
+      'phone': (user?['phone'] ?? '').toString().trim(),
       'email': (user?['email'] ?? '').toString().trim(),
       'whatsapp': '',
     };
 
-    if (ownerId.isNotEmpty && (branding['store_name']!.isNotEmpty || branding['logo_url']!.isNotEmpty)) {
+    if (branding['store_name']!.isNotEmpty || branding['logo_url']!.isNotEmpty) {
       await saveStoreBranding(branding);
     }
     return branding;
@@ -884,34 +1142,85 @@ class ApiService {
   Future<void> saveStoreBranding(Map<String, dynamic> branding) async {
     try {
       final ownerId = await getEffectiveStoreOwnerId();
+      final user = await getUserInfo();
+      final email = (user?['email'] ?? branding['email'] ?? '').toString().trim().toLowerCase();
+      final userId = user?['id']?.toString() ?? '';
+      final isStaff = await isStaffUser();
+
+      final encoded = jsonEncode(branding);
+
       if (ownerId.isNotEmpty) {
-        await _storage.write(key: 'store_branding_$ownerId', value: jsonEncode(branding));
+        await _storage.write(key: 'store_branding_$ownerId', value: encoded);
       }
-      await _storage.write(key: 'store_branding', value: jsonEncode(branding));
+      if (email.isNotEmpty) {
+        await _storage.write(key: 'store_branding_$email', value: encoded);
+      }
+      if (userId.isNotEmpty && userId != ownerId) {
+        await _storage.write(key: 'store_branding_$userId', value: encoded);
+      }
+
+      // If store owner, persist as master admin store branding for all staff to inherit!
+      if (!isStaff && ownerId.isNotEmpty) {
+        final storeName = (branding['store_name'] ?? '').toString().trim();
+        if (storeName.isNotEmpty && storeName != 'Admin Store' && storeName != 'User Store') {
+          await _storage.write(key: 'admin_store_name_$ownerId', value: storeName);
+        }
+        await _storage.write(key: 'admin_store_branding_$ownerId', value: encoded);
+      }
+
+      // Explicitly delete un-namespaced keys to protect other admins
+      await _storage.delete(key: 'store_branding');
+      await _storage.delete(key: 'admin_store_branding');
+      await _storage.delete(key: 'admin_store_name');
     } catch (_) {}
   }
 
   Future<bool> isStoreSetupCompleted() async {
+    final ownerId = await getEffectiveStoreOwnerId();
+    final user = await getUserInfo();
+    final userId = user?['id']?.toString() ?? '';
+    final scopeId = ownerId.isNotEmpty ? ownerId : userId;
+
+    if (scopeId.isNotEmpty) {
+      final scopedFlag = await _storage.read(key: 'store_setup_completed_$scopeId');
+      if (scopedFlag == 'true') return true;
+      if (scopedFlag == 'false') return false;
+    }
+
     final flag = await _storage.read(key: 'store_setup_completed');
     if (flag == 'true') return true;
     if (flag == 'false') return false;
 
-    // If flag is unset, only consider completed if local store branding was explicitly configured
-    final local = await _storage.read(key: 'store_branding');
-    if (local != null && local.isNotEmpty) {
-      final decoded = _safeJsonDecode(local);
-      if (decoded is Map<String, dynamic>) {
-        final name = (decoded['store_name'] ?? '').toString().trim();
-        if (name.isNotEmpty && name != 'Admin Store' && name != 'User Store' && name != 'POS STORE') {
-          await _storage.write(key: 'store_setup_completed', value: 'true');
-          return true;
-        }
+    // Fast check: if user already has an active store_name in user info, setup is completed!
+    final sName = (user?['store_name'] ?? '').toString().trim();
+    if (sName.isNotEmpty && sName != 'Admin Store' && sName != 'User Store' && sName != 'POS STORE') {
+      if (scopeId.isNotEmpty) {
+        await _storage.write(key: 'store_setup_completed_$scopeId', value: 'true');
       }
+      await _storage.write(key: 'store_setup_completed', value: 'true');
+      return true;
+    }
+
+    // Check scoped branding for this user/owner
+    final branding = await getStoreBranding();
+    final name = (branding['store_name'] ?? '').toString().trim();
+    if (name.isNotEmpty && name != 'Admin Store' && name != 'User Store' && name != 'POS STORE') {
+      if (scopeId.isNotEmpty) {
+        await _storage.write(key: 'store_setup_completed_$scopeId', value: 'true');
+      }
+      return true;
     }
     return false;
   }
 
   Future<void> setStoreSetupCompleted(bool completed) async {
+    final ownerId = await getEffectiveStoreOwnerId();
+    final user = await getUserInfo();
+    final userId = user?['id']?.toString() ?? '';
+    final scopeId = ownerId.isNotEmpty ? ownerId : userId;
+    if (scopeId.isNotEmpty) {
+      await _storage.write(key: 'store_setup_completed_$scopeId', value: completed ? 'true' : 'false');
+    }
     await _storage.write(key: 'store_setup_completed', value: completed ? 'true' : 'false');
   }
 
