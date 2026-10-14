@@ -21,6 +21,8 @@ migrate_working_dir/
 **/android/app/gradlew.bat
 **/android/local.properties
 **/android/key.properties
+*.jks
+*.keystore
 **/android/app/open_in_android_studio.iml
 **/android/.gradle
 **/android/app/build

@@ -57,6 +57,7 @@ class _PosScreenState extends State<PosScreen> {
   String? _effectiveStoreName;
 
   final List<Map<String, dynamic>> _cartItems = [];
+  DateTime? _lastBackPressTime;
 
   @override
   void initState() {
@@ -478,41 +479,60 @@ class _PosScreenState extends State<PosScreen> {
         : Responsive.getGridColumns(context);
     final double cardRatio = Responsive.getProductCardAspectRatio(context);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isWideTerminal && _cartItems.isNotEmpty) _buildCheckoutBar(),
-            if (isWideTerminal)
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: _buildBottomDock(lowStockCount),
-                ),
-              )
-            else
-              _buildBottomDock(lowStockCount),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        final now = DateTime.now();
+        if (_lastBackPressTime == null || now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit POS terminal'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9FAFB),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isWideTerminal && _cartItems.isNotEmpty) _buildCheckoutBar(),
+              if (isWideTerminal)
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: _buildBottomDock(lowStockCount),
+                  ),
+                )
+              else
+                _buildBottomDock(lowStockCount),
+            ],
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: isWideTerminal
-            ? Row(
-                children: [
-                  Expanded(
-                    child: _buildCatalogColumn(filteredProducts, lowStockCount, gridColumns, cardRatio),
-                  ),
-                  Container(width: 1, color: const Color(0xFFE2E8F0)),
-                  SizedBox(
-                    width: 380,
-                    child: _buildWideCartSidebar(),
-                  ),
-                ],
-              )
-            : _buildCatalogColumn(filteredProducts, lowStockCount, gridColumns, cardRatio),
+        body: SafeArea(
+          child: isWideTerminal
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: _buildCatalogColumn(filteredProducts, lowStockCount, gridColumns, cardRatio),
+                    ),
+                    Container(width: 1, color: const Color(0xFFE2E8F0)),
+                    SizedBox(
+                      width: 380,
+                      child: _buildWideCartSidebar(),
+                    ),
+                  ],
+                )
+              : _buildCatalogColumn(filteredProducts, lowStockCount, gridColumns, cardRatio),
+        ),
       ),
     );
   }

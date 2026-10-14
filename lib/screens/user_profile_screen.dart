@@ -39,6 +39,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   late bool _orderSoundAlerts;
   late bool _promoAlerts;
   bool _autoPrintBill = true;
+  String _paperSize = '58mm';
 
   List<dynamic> _staffList = [];
 
@@ -63,12 +64,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   /// 1. USER PROFILE & STORE BRANDING FETCHER:
-  /// Combines user profile endpoint and CMS store branding endpoint
-  /// to display cashier/owner avatar, active store name, and role permissions.
+  /// Combines user profile endpoint, store branding, and hardware preferences
   Future<void> _fetchUserProfile() async {
     try {
       final data = await _apiService.getUserDetail();
       final branding = await _apiService.getStoreBranding();
+      final hw = await _apiService.getHardwareSettings();
       if (!mounted) return;
       setState(() {
         _userData = {..._userData, ...data};
@@ -82,6 +83,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         } else {
           _userData.remove('logo_url');
         }
+        _paperSize = (hw['paper_size'] ?? '58mm').toString();
+        _autoPrintBill = hw['auto_print'] != false;
         _isLoading = false;
       });
     } catch (_) {
@@ -90,6 +93,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _updatePaperSize(String size) async {
+    setState(() => _paperSize = size);
+    final hw = await _apiService.getHardwareSettings();
+    hw['paper_size'] = size;
+    await _apiService.saveHardwareSettings(hw);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Thermal printer width set to $size roll!'),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _updateAutoPrint(bool val) async {
+    setState(() => _autoPrintBill = val);
+    final hw = await _apiService.getHardwareSettings();
+    hw['auto_print'] = val;
+    await _apiService.saveHardwareSettings(hw);
   }
 
   /// 2. CASHIER & STAFF LIST FETCHER:
@@ -1234,13 +1260,83 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           },
                         ),
                         const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.aspect_ratio_rounded, color: Colors.black, size: 22),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Receipt Paper Width', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                    Text('58mm (32 cols / Mobile) • 80mm (48 cols / Counter)', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    InkWell(
+                                      onTap: () => _updatePaperSize('58mm'),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: _paperSize == '58mm' ? Colors.black : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '58mm',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: _paperSize == '58mm' ? Colors.white : Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: () => _updatePaperSize('80mm'),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: _paperSize == '80mm' ? Colors.black : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '80mm',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: _paperSize == '80mm' ? Colors.white : Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
                         SwitchListTile(
                           secondary: const Icon(Icons.receipt_long_outlined, color: Colors.black, size: 22),
                           title: const Text('Auto-Print Bill on Order Checkout', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                           subtitle: const Text('Automatically print receipt when order completes', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                           value: _autoPrintBill,
                           activeColor: Colors.black,
-                          onChanged: (val) => setState(() => _autoPrintBill = val),
+                          onChanged: (val) => _updateAutoPrint(val),
                         ),
                       ],
                     ),

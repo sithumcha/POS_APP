@@ -1,65 +1,196 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'permission_service.dart';
 import 'notification_service.dart';
 
 class BluetoothPrinterService {
   static final BluetoothPrinterService _instance = BluetoothPrinterService._internal();
   factory BluetoothPrinterService() => _instance;
-  BluetoothPrinterService._internal();
+  BluetoothPrinterService._internal() {
+    loadSavedDevices();
+  }
+
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      resetOnError: true,
+    ),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
+
+  static const String _storageKeyPrinters = 'saved_bluetooth_printers';
+  static const String _storageKeyConnected = 'last_connected_printer_address';
 
   Map<String, String>? _connectedDevice;
   bool _isScanning = false;
+  final List<Map<String, String>> _availableDevices = [];
+  bool _isInitialized = false;
 
   Map<String, String>? get connectedDevice => _connectedDevice;
   bool get isConnected => _connectedDevice != null;
   bool get isScanning => _isScanning;
 
-  // Mock list of discovered & paired Bluetooth printers
-  final List<Map<String, String>> _availableDevices = [
-    {
-      'name': 'POS-58 Thermal Printer',
-      'address': '00:11:22:33:44:55',
-      'type': 'Bluetooth 4.0 / Classic',
-    },
-    {
-      'name': 'PT-210 Mobile Printer',
-      'address': '88:66:22:11:99:33',
-      'type': 'Bluetooth 4.0',
-    },
-    {
-      'name': 'RPP02N ESC/POS Printer',
-      'address': 'AA:BB:CC:DD:EE:FF',
-      'type': 'Bluetooth Classic',
-    },
-  ];
-
   List<Map<String, String>> get availableDevices => List.unmodifiable(_availableDevices);
 
+  /// Load dynamically saved paired Bluetooth printers from secure storage
+  Future<void> loadSavedDevices() async {
+    try {
+      final raw = await _storage.read(key: _storageKeyPrinters);
+      if (raw != null && raw.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(raw);
+        _availableDevices.clear();
+        for (var item in decoded) {
+          if (item is Map) {
+            _availableDevices.add(item.map((k, v) => MapEntry(k.toString(), v.toString())));
+          }
+        }
+      }
+      final lastAddr = await _storage.read(key: _storageKeyConnected);
+      if (lastAddr != null && lastAddr.isNotEmpty) {
+        final match = _availableDevices.where((d) => d['address'] == lastAddr);
+        if (match.isNotEmpty) {
+          _connectedDevice = match.first;
+        }
+      }
+      _isInitialized = true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error loading saved bluetooth printers: $e');
+      }
+    }
+  }
+
+  /// Persist the current dynamic printer list to storage
+  Future<void> _persistDevices() async {
+    try {
+      await _storage.write(key: _storageKeyPrinters, value: jsonEncode(_availableDevices));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error persisting bluetooth printers: $e');
+      }
+    }
+  }
+
+  /// Dynamically add or update a paired printer
+  Future<void> saveDevice(Map<String, String> device) async {
+    final addr = device['address'] ?? '';
+    if (addr.isEmpty) return;
+    final index = _availableDevices.indexWhere((d) => d['address'] == addr);
+    if (index >= 0) {
+      _availableDevices[index] = device;
+    } else {
+      _availableDevices.add(device);
+    }
+    await _persistDevices();
+  }
+
+  /// Remove a printer from the saved list
+  Future<void> removeDevice(String address) async {
+    if (_connectedDevice?['address'] == address) {
+      await disconnectDevice();
+    }
+    _availableDevices.removeWhere((d) => d['address'] == address);
+    await _persistDevices();
+  }
+
+  /// Scan for real paired Bluetooth thermal printers dynamically using native driver
   Future<List<Map<String, String>>> scanDevices() async {
     // Request Bluetooth and Location permission before scanning
     await PermissionService().requestBluetoothPermissions();
 
     _isScanning = true;
-    await Future.delayed(const Duration(seconds: 2));
+    if (!_isInitialized) {
+      await loadSavedDevices();
+    }
+
+    // On mobile platforms, query native paired Bluetooth printers
+    if (!kIsWeb) {
+      try {
+        final bool isGranted = await PrintBluetoothThermal.isPermissionBluetoothGranted;
+        if (isGranted) {
+          final List<BluetoothInfo> paired = await PrintBluetoothThermal.pairedBluetooths;
+          for (final p in paired) {
+            final name = (p.name.isNotEmpty) ? p.name : 'Bluetooth Thermal Printer';
+            final mac = p.macAdress;
+            if (mac.isNotEmpty) {
+              await saveDevice({
+                'name': name,
+                'address': mac,
+                'type': 'Bluetooth ESC/POS',
+              });
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Bluetooth hardware paired scan error: $e');
+        }
+      }
+    } else {
+      await Future.delayed(const Duration(milliseconds: 800));
+    }
+
     _isScanning = false;
-    return _availableDevices;
+    return List.unmodifiable(_availableDevices);
   }
 
+  /// Connect to physical Bluetooth thermal printer via MAC address
   Future<bool> connectDevice(Map<String, String> device) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    _connectedDevice = device;
-    NotificationService().triggerBluetoothNotification(
-      printerName: device['name'] ?? 'Thermal Printer',
-      connected: true,
-    );
-    return true;
+    final macAddress = device['address'] ?? '';
+    bool success = false;
+
+    if (!kIsWeb && macAddress.isNotEmpty) {
+      try {
+        success = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Hardware Bluetooth connection error: $e');
+        }
+        success = false;
+      }
+    } else {
+      await Future.delayed(const Duration(milliseconds: 500));
+      success = true;
+    }
+
+    if (success) {
+      _connectedDevice = device;
+      if (macAddress.isNotEmpty) {
+        await _storage.write(key: _storageKeyConnected, value: macAddress);
+      }
+      NotificationService().triggerBluetoothNotification(
+        printerName: device['name'] ?? 'Thermal Printer',
+        connected: true,
+      );
+    }
+
+    return success;
   }
 
+  /// Disconnect active Bluetooth thermal printer
   Future<void> disconnectDevice() async {
     final name = _connectedDevice?['name'] ?? 'Thermal Printer';
-    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!kIsWeb) {
+      try {
+        await PrintBluetoothThermal.disconnect;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Hardware Bluetooth disconnect error: $e');
+        }
+      }
+    } else {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
     _connectedDevice = null;
+    await _storage.delete(key: _storageKeyConnected);
     NotificationService().triggerBluetoothNotification(
       printerName: name,
       connected: false,
@@ -192,7 +323,6 @@ class BluetoothPrinterService {
     String? customerPhone,
     int width = 32,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
     final text = generateThermalReceiptText(
       storeName: storeName,
       cashierName: cashierName,
@@ -218,6 +348,97 @@ class BluetoothPrinterService {
       debugPrint('=== BLUETOOTH ESC/POS RECEIPT DATA ===');
       debugPrint(text);
     }
+
+    // Physical Hardware Printing on Android / iOS
+    if (!kIsWeb) {
+      try {
+        final bool isConn = await PrintBluetoothThermal.connectionStatus;
+        if (isConn) {
+          final profile = await CapabilityProfile.load();
+          final paper = width >= 48 ? PaperSize.mm80 : PaperSize.mm58;
+          final generator = Generator(paper, profile);
+          List<int> bytes = [];
+
+          bytes += generator.reset();
+          bytes += generator.text(
+            storeName,
+            styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
+          );
+          if (storeAddress != null && storeAddress.isNotEmpty) {
+            bytes += generator.text(storeAddress, styles: const PosStyles(align: PosAlign.center));
+          }
+          if (storePhone != null && storePhone.isNotEmpty) {
+            bytes += generator.text('Tel: $storePhone', styles: const PosStyles(align: PosAlign.center));
+          }
+          bytes += generator.text('POS RECEIPT', styles: const PosStyles(align: PosAlign.center, bold: true));
+          bytes += generator.hr();
+          bytes += generator.row([
+            PosColumn(text: 'Receipt #:', width: 4),
+            PosColumn(text: receiptNumber, width: 8, styles: const PosStyles(align: PosAlign.right)),
+          ]);
+          bytes += generator.row([
+            PosColumn(text: 'Date:', width: 4),
+            PosColumn(
+              text: '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}',
+              width: 8,
+              styles: const PosStyles(align: PosAlign.right),
+            ),
+          ]);
+          bytes += generator.row([
+            PosColumn(text: 'Cashier:', width: 4),
+            PosColumn(text: cashierName, width: 8, styles: const PosStyles(align: PosAlign.right)),
+          ]);
+          bytes += generator.hr();
+
+          for (final item in orderItems) {
+            final name = (item['name'] ?? 'Item').toString();
+            final qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+            final price = double.tryParse((item['price'] ?? item['unit_price'] ?? 0.0).toString()) ?? 0.0;
+            final total = double.tryParse((item['total_price'] ?? (price * qty)).toString()) ?? (price * qty);
+
+            bytes += generator.text(name, styles: const PosStyles(bold: true));
+            bytes += generator.row([
+              PosColumn(text: '  $qty x ${price.toStringAsFixed(2)}', width: 7),
+              PosColumn(text: total.toStringAsFixed(2), width: 5, styles: const PosStyles(align: PosAlign.right)),
+            ]);
+          }
+
+          bytes += generator.hr();
+          bytes += generator.row([
+            PosColumn(text: 'TOTAL:', width: 6, styles: const PosStyles(bold: true, height: PosTextSize.size2)),
+            PosColumn(text: 'LKR ${grandTotal.toStringAsFixed(2)}', width: 6, styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size2)),
+          ]);
+          bytes += generator.row([
+            PosColumn(text: 'Paid via:', width: 6),
+            PosColumn(text: paymentMethod, width: 6, styles: const PosStyles(align: PosAlign.right)),
+          ]);
+          if (paymentMethod == 'Cash' && cashTendered > 0) {
+            bytes += generator.row([
+              PosColumn(text: 'Cash Tendered:', width: 6),
+              PosColumn(text: 'LKR ${cashTendered.toStringAsFixed(2)}', width: 6, styles: const PosStyles(align: PosAlign.right)),
+            ]);
+            bytes += generator.row([
+              PosColumn(text: 'Change Due:', width: 6),
+              PosColumn(text: 'LKR ${changeDue.toStringAsFixed(2)}', width: 6, styles: const PosStyles(align: PosAlign.right)),
+            ]);
+          }
+          bytes += generator.hr();
+          bytes += generator.text(thankYouNote ?? 'THANK YOU FOR YOUR PURCHASE!', styles: const PosStyles(align: PosAlign.center));
+          bytes += generator.feed(2);
+          bytes += generator.cut();
+
+          final sent = await PrintBluetoothThermal.writeBytes(bytes);
+          if (kDebugMode) debugPrint('PrintBluetoothThermal physical writeBytes success: $sent');
+          return sent;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Hardware Bluetooth print error: $e');
+        }
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
     return true;
   }
 }

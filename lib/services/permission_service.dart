@@ -18,20 +18,23 @@ class PermissionService {
     }
   }
 
-  /// Request Bluetooth Permissions (Bluetooth Scan, Connect, Advertise & Location)
+  /// Request Bluetooth Permissions (iOS & Android)
   Future<bool> requestBluetoothPermissions() async {
     if (kIsWeb) return true;
     try {
+      // iOS uses Permission.bluetooth
       // Android 12+ requires BLUETOOTH_SCAN, BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE
-      // Older versions require ACCESS_FINE_LOCATION
+      // Older Android requires location
       final Map<Permission, PermissionStatus> statuses = await [
+        Permission.bluetooth,
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
         Permission.bluetoothAdvertise,
         Permission.locationWhenInUse,
       ].request();
 
-      final bool granted = statuses[Permission.bluetoothConnect]?.isGranted == true ||
+      final bool granted = statuses[Permission.bluetooth]?.isGranted == true ||
+          statuses[Permission.bluetoothConnect]?.isGranted == true ||
           statuses[Permission.bluetoothScan]?.isGranted == true ||
           statuses[Permission.locationWhenInUse]?.isGranted == true;
 
@@ -42,11 +45,24 @@ class PermissionService {
     }
   }
 
-  /// Request both Notification and Bluetooth permissions on startup
+  /// Request Camera Permission for Barcode / QR Scanning (iOS & Android)
+  Future<bool> requestCameraPermission() async {
+    if (kIsWeb) return true;
+    try {
+      final status = await Permission.camera.request();
+      return status.isGranted;
+    } catch (e) {
+      debugPrint('Camera permission error: $e');
+      return false;
+    }
+  }
+
+  /// Request Notification, Camera and Bluetooth permissions on startup
   Future<void> requestAllAppPermissions() async {
     if (kIsWeb) return;
     try {
       await requestNotificationPermission();
+      await requestCameraPermission();
       await requestBluetoothPermissions();
     } catch (e) {
       debugPrint('Error requesting app permissions: $e');

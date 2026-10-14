@@ -7,7 +7,6 @@ import 'services/api_service.dart';
 import 'services/offline_sync_service.dart';
 import 'services/notification_service.dart';
 import 'services/permission_service.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'services/security_check_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/web_splash_helper.dart';
@@ -51,7 +50,7 @@ class PosApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: rootNavigatorKey,
-      title: 'POS App',
+      title: 'QuickeApp POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: isDeviceSecure ? const AuthCheckWrapper() : const DeviceCompromisedScreen(),

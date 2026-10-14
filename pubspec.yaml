@@ -23,6 +23,9 @@ dependencies:
   permission_handler: ^12.0.3
   flutter_jailbreak_detection: ^1.1.0
   flutter_windowmanager: ^0.2.0
+  mobile_scanner: ^6.0.11
+  print_bluetooth_thermal: ^1.2.1
+  esc_pos_utils_plus: ^2.0.4
 
 dev_dependencies:
   flutter_test:
@@ -30,9 +33,19 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   drift_dev: ^2.16.0
   build_runner: ^2.4.8
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/images/quicke_logo_opaque.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/quicke_logo_opaque.png"
 

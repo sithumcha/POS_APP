@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class BarcodeScannerModal extends StatefulWidget {
   final List<dynamic> products;
@@ -17,9 +18,11 @@ class BarcodeScannerModal extends StatefulWidget {
 class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTickerProviderStateMixin {
   late final AnimationController _scanAnimationController;
   final TextEditingController _manualBarCodeController = TextEditingController();
+  late final MobileScannerController _scannerController;
 
   bool _flashOn = false;
   String? _lastScannedSku;
+  DateTime _lastDetectionTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -28,13 +31,35 @@ class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTi
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
+
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+      torchEnabled: false,
+    );
   }
 
   @override
   void dispose() {
     _scanAnimationController.dispose();
     _manualBarCodeController.dispose();
+    _scannerController.dispose();
     super.dispose();
+  }
+
+  void _handleBarcodeCapture(BarcodeCapture capture) {
+    final now = DateTime.now();
+    if (now.difference(_lastDetectionTime).inMilliseconds < 1600) {
+      return;
+    }
+    for (final barcode in capture.barcodes) {
+      final code = barcode.rawValue ?? barcode.displayValue;
+      if (code != null && code.trim().isNotEmpty) {
+        _lastDetectionTime = now;
+        _triggerBarcodeScan(code.trim());
+        break;
+      }
+    }
   }
 
   void _triggerBarcodeScan(String sku) {
@@ -210,19 +235,12 @@ class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- 1. CAMERA VIEWFINDER OVERLAY CONTAINER ---
+                  // --- 1. LIVE CAMERA VIEWFINDER OVERLAY CONTAINER ---
                   Container(
                     width: double.infinity,
                     height: 250,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0F172A),
-                          Color(0xFF1E293B),
-                        ],
-                      ),
+                      color: const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
                       boxShadow: [
@@ -233,140 +251,164 @@ class _BarcodeScannerModalState extends State<BarcodeScannerModal> with SingleTi
                         ),
                       ],
                     ),
-                    child: Stack(
-                      children: [
-                        // Viewfinder Center Target
-                        Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
-                                ),
-                                child: Icon(
-                                  _flashOn ? Icons.flash_on_rounded : Icons.qr_code_2_rounded,
-                                  size: 44,
-                                  color: Colors.white.withOpacity(0.85),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.35),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                                ),
-                                child: const Text(
-                                  'Align Barcode or QR within frame',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: -0.1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Corner Viewfinder Brackets
-                        _buildViewfinderCorners(),
-
-                        // Animated Scanning Laser Line
-                        AnimatedBuilder(
-                          animation: _scanAnimationController,
-                          builder: (context, child) {
-                            return Positioned(
-                              top: 25 + (_scanAnimationController.value * 190),
-                              left: 28,
-                              right: 28,
-                              child: Container(
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0x0006B6D4),
-                                      Color(0xFF06B6D4),
-                                      Color(0xFF38BDF8),
-                                      Color(0xFF06B6D4),
-                                      Color(0x0006B6D4),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Live Phone Camera Feed
+                          MobileScanner(
+                            controller: _scannerController,
+                            onDetect: _handleBarcodeCapture,
+                            errorBuilder: (context, error, child) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 40),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        'Camera feed: ${error.errorCode.name}',
+                                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Use manual input below or ensure camera permission is granted.',
+                                        style: TextStyle(color: Colors.white38, fontSize: 11),
+                                        textAlign: TextAlign.center,
+                                      ),
                                     ],
                                   ),
-                                  borderRadius: BorderRadius.circular(2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF06B6D4).withOpacity(0.8),
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-
-                        // Flashlight Toggle Button Overlay
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => setState(() => _flashOn = !_flashOn),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                                ),
-                                child: Icon(
-                                  _flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                                  color: _flashOn ? const Color(0xFFFBBF24) : Colors.white70,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
-                        ),
 
-                        // Active Scanner Status Badge
-                        Positioned(
-                          bottom: 12,
-                          left: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.15)),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.circle, color: Color(0xFF10B981), size: 7),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Ready to Scan • Auto-detect',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
+                          // Corner Viewfinder Brackets
+                          _buildViewfinderCorners(),
+
+                          // Animated Scanning Laser Line
+                          AnimatedBuilder(
+                            animation: _scanAnimationController,
+                            builder: (context, child) {
+                              return Positioned(
+                                top: 25 + (_scanAnimationController.value * 190),
+                                left: 28,
+                                right: 28,
+                                child: Container(
+                                  height: 3,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0x0006B6D4),
+                                        Color(0xFF06B6D4),
+                                        Color(0xFF38BDF8),
+                                        Color(0xFF06B6D4),
+                                        Color(0x0006B6D4),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF06B6D4).withOpacity(0.8),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              );
+                            },
+                          ),
+
+                          // Switch Camera Button (Front / Back)
+                          Positioned(
+                            top: 12,
+                            left: 12,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _scannerController.switchCamera(),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.45),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                                  ),
+                                  child: const Icon(
+                                    Icons.cameraswitch_rounded,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+
+                          // Flashlight Toggle Button Overlay
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () async {
+                                  await _scannerController.toggleTorch();
+                                  setState(() => _flashOn = !_flashOn);
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.45),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                                  ),
+                                  child: Icon(
+                                    _flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                                    color: _flashOn ? const Color(0xFFFBBF24) : Colors.white70,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Active Scanner Status Badge
+                          Positioned(
+                            bottom: 12,
+                            left: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.65),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white.withOpacity(0.15)),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle, color: Color(0xFF10B981), size: 7),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Camera Barcode Scanner Active',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
