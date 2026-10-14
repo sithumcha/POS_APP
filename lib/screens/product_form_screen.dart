@@ -528,16 +528,21 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     _isLoadingCategories
                         ? const Center(child: CircularProgressIndicator(color: Colors.black))
                         : DropdownButtonFormField<int>(
-                            value: _selectedCategoryId,
+                            value: _categories.any((c) => int.tryParse(c['id']?.toString() ?? '') == _selectedCategoryId)
+                                ? _selectedCategoryId
+                                : null,
                             hint: const Text('Select a Category'),
                             isExpanded: true,
                             decoration: const InputDecoration(
                               contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             ),
-                            items: _categories.map((cat) {
+                            items: _categories
+                                .where((c) => (int.tryParse(c['id']?.toString() ?? '') ?? 0) > 0)
+                                .map((cat) {
+                              final cid = int.parse(cat['id'].toString());
                               return DropdownMenuItem<int>(
-                                value: cat['id'] as int,
-                                child: Text(cat['name'] ?? 'Category'),
+                                value: cid,
+                                child: Text(cat['name']?.toString() ?? 'Category #$cid'),
                               );
                             }).toList(),
                             onChanged: _onCategoryChanged,
@@ -550,7 +555,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     _isLoadingSubcategories
                         ? const Center(child: CircularProgressIndicator(color: Colors.black))
                         : DropdownButtonFormField<int>(
-                            value: _selectedSubcategoryId,
+                            value: _subcategories.any((s) => int.tryParse(s['id']?.toString() ?? '') == _selectedSubcategoryId)
+                                ? _selectedSubcategoryId
+                                : null,
                             hint: Text(
                               _selectedCategoryId == null
                                   ? 'Select a Category first'
@@ -560,10 +567,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             decoration: const InputDecoration(
                               contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             ),
-                            items: _subcategories.map((subcat) {
+                            items: _subcategories
+                                .where((s) => (int.tryParse(s['id']?.toString() ?? '') ?? 0) > 0)
+                                .map((subcat) {
+                              final sid = int.parse(subcat['id'].toString());
                               return DropdownMenuItem<int>(
-                                value: subcat['id'] as int,
-                                child: Text(subcat['name'] ?? 'Subcategory'),
+                                value: sid,
+                                child: Text(subcat['name']?.toString() ?? 'Subcategory #$sid'),
                               );
                             }).toList(),
                             onChanged: _selectedCategoryId == null || _subcategories.isEmpty

@@ -366,12 +366,15 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                       const SizedBox(width: 6),
                       const Icon(Icons.badge_outlined, size: 13, color: AppColors.textSecondary),
                       const SizedBox(width: 5),
-                      Text(
-                        'Cashier: $_currentCashierName ($_counterName)',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                      Flexible(
+                        child: Text(
+                          'Cashier: $_currentCashierName ($_counterName)',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
                     ],
@@ -1351,19 +1354,21 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           const Text(
                             'Customer Details',
                             style: TextStyle(
-                              fontSize: 14.5,
+                              fontSize: 14,
                               fontWeight: FontWeight.w800,
                               color: Color(0xFF0F172A),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: hasCustomCustomer ? const Color(0xFFD1FAE5) : const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(6),
@@ -1374,7 +1379,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                             child: Text(
                               hasCustomCustomer ? 'CUSTOM' : 'OPTIONAL',
                               style: TextStyle(
-                                fontSize: 9.5,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.5,
                                 color: hasCustomCustomer ? const Color(0xFF065F46) : const Color(0xFF64748B),
@@ -1388,6 +1393,8 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                         hasCustomCustomer
                             ? 'Customer info will be printed on receipt'
                             : 'Auto-assigned to Walk-in Customer (0770000000)',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -1397,6 +1404,7 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 // Quick Clear or Reset Button
                 if (hasCustomCustomer)
                   InkWell(
@@ -1556,17 +1564,16 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                           children: [
                             Icon(Icons.badge_outlined, size: 14, color: Color(0xFF059669)),
                             SizedBox(width: 6),
-                            Text(
-                              'Customer Full Name',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
+                            Flexible(
+                              child: Text(
+                                'Customer Full Name (Optional)',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
-                            ),
-                            Text(
-                              ' (Optional)',
-                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                             ),
                           ],
                         ),
@@ -1617,17 +1624,16 @@ class _CartCheckoutSheetState extends State<CartCheckoutSheet> {
                           children: [
                             Icon(Icons.phone_iphone_rounded, size: 14, color: Color(0xFF059669)),
                             SizedBox(width: 6),
-                            Text(
-                              'Mobile / WhatsApp Number',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
+                            Flexible(
+                              child: Text(
+                                'Mobile / WhatsApp (Optional)',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
-                            ),
-                            Text(
-                              ' (Optional)',
-                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                             ),
                           ],
                         ),

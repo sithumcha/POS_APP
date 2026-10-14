@@ -2423,7 +2423,7 @@ class ApiService {
       final res = await _client.get(
         Uri.parse('$baseUrl/categories'),
         headers: await _headers(),
-      ).timeout(const Duration(milliseconds: 6000));
+      ).timeout(const Duration(seconds: 12));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         List<dynamic>? result;
@@ -2543,7 +2543,7 @@ class ApiService {
     try {
       String endpoint = '$baseUrl/subcategories';
       if (categoryId != null) endpoint += '?categoryId=$categoryId';
-      final res = await _client.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(milliseconds: 5000));
+      final res = await _client.get(Uri.parse(endpoint), headers: await _headers()).timeout(const Duration(seconds: 12));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         List<dynamic>? result;
@@ -2586,9 +2586,48 @@ class ApiService {
 
   /// POST /subcategories
   Future<Map<String, dynamic>> createSubcategory(Map<String, dynamic> data) async {
-    final catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+    int catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+
+    // Resilient fallback: If catId is invalid or a client-side timestamp (> 1B or > 32-bit INT), resolve to genuine server category
+    if (catId <= 0 || catId > 2147483647 || catId > 1000000000) {
+      debugPrint('[API] Out-of-range or invalid catId ($catId) detected in createSubcategory. Auto-resolving from server...');
+      final serverCats = await getCategories(forceRefresh: true);
+      final providedName = (data['category_name'] ?? data['parent_category_name'] ?? '').toString().trim().toLowerCase();
+      dynamic matched;
+      if (providedName.isNotEmpty) {
+        matched = serverCats.firstWhere(
+          (c) => (c['name'] ?? '').toString().trim().toLowerCase() == providedName,
+          orElse: () => null,
+        );
+      }
+      if (matched == null && serverCats.isNotEmpty) {
+        matched = serverCats.firstWhere(
+          (c) {
+            final id = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+            return id > 0 && id <= 2147483647;
+          },
+          orElse: () => null,
+        );
+      }
+      if (matched != null) {
+        final realId = int.tryParse(matched['id']?.toString() ?? '') ?? 0;
+        if (realId > 0 && realId <= 2147483647) {
+          catId = realId;
+          debugPrint('[API] Successfully resolved catId to server category ID $catId (${matched['name']})');
+        }
+      }
+    }
+
+    if (catId <= 0 || catId > 2147483647) {
+      return {
+        'success': false,
+        'message': 'Valid parent category is required. Please create a parent category first.',
+      };
+    }
+
     final Map<String, dynamic> bodyMap = {
       'category_id': catId,
+      'categoryId': catId,
       'name': (data['name'] ?? '').toString().trim(),
       'slug': (data['slug'] != null && data['slug'].toString().trim().isNotEmpty)
           ? data['slug'].toString().trim()
@@ -2604,6 +2643,7 @@ class ApiService {
     }
 
     try {
+      debugPrint('[API] createSubcategory sending body: ${jsonEncode(bodyMap)}');
       final res = await http.post(
         Uri.parse('$baseUrl/subcategories'),
         headers: await _headers(),
@@ -2611,6 +2651,8 @@ class ApiService {
       );
       debugPrint('[API] createSubcategory response: status=${res.statusCode}, body=${res.body}');
       if (res.statusCode == 200 || res.statusCode == 201) {
+        _cachedSubcategoriesByCat.clear();
+        _subcatCacheTimes.clear();
         return {'success': true, 'statusCode': res.statusCode};
       }
 
@@ -2619,6 +2661,8 @@ class ApiService {
         final decoded = jsonDecode(res.body);
         if (decoded is Map && decoded['message'] != null) {
           errorMsg = decoded['message'].toString();
+        } else if (decoded is Map && decoded['error'] != null) {
+          errorMsg = decoded['error'].toString();
         }
       } catch (_) {}
 
@@ -2627,6 +2671,8 @@ class ApiService {
       debugPrint('[API] createSubcategory error (queueing offline): $e');
       try {
         await OfflineSyncService().queueSubcategoryAction(action: 'create', data: bodyMap);
+        _cachedSubcategoriesByCat.clear();
+        _subcatCacheTimes.clear();
         return {'success': true, 'message': 'Queued offline', 'isOffline': true};
       } catch (_) {}
       return {'success': false, 'message': e.toString()};
@@ -2635,9 +2681,28 @@ class ApiService {
 
   /// PUT /subcategories/{id}
   Future<Map<String, dynamic>> updateSubcategory(int id, Map<String, dynamic> data) async {
-    final catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+    int catId = int.tryParse(data['category_id']?.toString() ?? data['categoryId']?.toString() ?? '') ?? 0;
+
+    // Resilient fallback for out-of-range IDs
+    if (catId <= 0 || catId > 2147483647 || catId > 1000000000) {
+      final serverCats = await getCategories(forceRefresh: true);
+      if (serverCats.isNotEmpty) {
+        final matched = serverCats.firstWhere(
+          (c) {
+            final cid = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+            return cid > 0 && cid <= 2147483647;
+          },
+          orElse: () => null,
+        );
+        if (matched != null) {
+          catId = int.tryParse(matched['id']?.toString() ?? '') ?? 0;
+        }
+      }
+    }
+
     final Map<String, dynamic> bodyMap = {
       'category_id': catId,
+      'categoryId': catId,
       'name': (data['name'] ?? '').toString().trim(),
       'slug': (data['slug'] != null && data['slug'].toString().trim().isNotEmpty)
           ? data['slug'].toString().trim()
@@ -2667,6 +2732,8 @@ class ApiService {
       debugPrint('[API] updateSubcategory response: status=${res.statusCode}, body=${res.body}');
 
       if (res.statusCode == 200 || res.statusCode == 204) {
+        _cachedSubcategoriesByCat.clear();
+        _subcatCacheTimes.clear();
         return {'success': true, 'statusCode': res.statusCode};
       }
 
@@ -2681,6 +2748,8 @@ class ApiService {
         final decoded = jsonDecode(res.body);
         if (decoded is Map && decoded['message'] != null) {
           errorMsg = decoded['message'].toString();
+        } else if (decoded is Map && decoded['error'] != null) {
+          errorMsg = decoded['error'].toString();
         }
       } catch (_) {}
 
@@ -2689,6 +2758,8 @@ class ApiService {
       debugPrint('[API] updateSubcategory error (queueing offline): $e');
       try {
         await OfflineSyncService().queueSubcategoryAction(action: 'update', data: bodyMap, id: id);
+        _cachedSubcategoriesByCat.clear();
+        _subcatCacheTimes.clear();
         return {'success': true, 'message': 'Queued offline', 'isOffline': true};
       } catch (_) {}
       return {'success': false, 'message': e.toString()};
@@ -2697,12 +2768,18 @@ class ApiService {
 
   /// DELETE /subcategories/{id}
   Future<bool> deleteSubcategory(int id) async {
+    _cachedSubcategoriesByCat.clear();
+    _subcatCacheTimes.clear();
     try {
       final res = await http.delete(
         Uri.parse('$baseUrl/subcategories/$id'),
         headers: await _headers(),
       );
-      if (res.statusCode == 200 || res.statusCode == 204) return true;
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        _cachedSubcategoriesByCat.clear();
+        _subcatCacheTimes.clear();
+        return true;
+      }
     } catch (e) {
       debugPrint('[API] deleteSubcategory error (queueing offline): $e');
       try {

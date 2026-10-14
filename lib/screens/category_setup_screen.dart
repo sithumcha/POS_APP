@@ -121,7 +121,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       _isLoadingCategories = true;
     });
     try {
-      final cats = await _apiService.getCategories();
+      final cats = await _apiService.getCategories(forceRefresh: true);
       if (!mounted) return;
       setState(() {
         _categories = cats;
@@ -141,7 +141,10 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       _isLoadingSubcategories = true;
     });
     try {
-      final subcats = await _apiService.getSubcategories(categoryId: _selectedFilterParentCategoryId);
+      final subcats = await _apiService.getSubcategories(
+        categoryId: _selectedFilterParentCategoryId,
+        forceRefresh: true,
+      );
       if (!mounted) return;
       setState(() {
         _subcategories = subcats;
@@ -189,9 +192,8 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     if (confirmed == true) {
       final success = await _apiService.deleteCategory(id);
       if (success) {
-        setState(() {
-          _categories.removeWhere((c) => c['id'] == id);
-        });
+        await _loadCategories();
+        await _loadSubcategories();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -238,9 +240,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     if (confirmed == true) {
       final success = await _apiService.deleteSubcategory(id);
       if (success) {
-        setState(() {
-          _subcategories.removeWhere((s) => s['id'] == id);
-        });
+        await _loadSubcategories();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -472,22 +472,12 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                       };
 
                       if (isEdit) {
-                        final id = initialCategory['id'] as int;
+                        final id = int.tryParse(initialCategory['id']?.toString() ?? '') ?? 0;
                         await _apiService.updateCategory(id, payload);
-                        setState(() {
-                          initialCategory['name'] = name;
-                          initialCategory['slug'] = payload['slug'];
-                          initialCategory['image'] = payload['image'];
-                          initialCategory['status'] = isActive;
-                        });
+                        await _loadCategories();
                       } else {
                         await _apiService.createCategory(payload);
-                        setState(() {
-                          _categories.add({
-                            'id': DateTime.now().millisecondsSinceEpoch,
-                            ...payload,
-                          });
-                        });
+                        await _loadCategories();
                       }
 
                       nav.pop();
@@ -521,10 +511,50 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
   void _showSubcategoryModalForm({Map<String, dynamic>? initialSubcategory}) {
     final bool isEdit = initialSubcategory != null;
 
-    final availableIds = _categories
-        .map((c) => int.tryParse(c['id']?.toString() ?? ''))
-        .whereType<int>()
-        .toSet();
+    // Filter genuine server categories (id > 0 and <= 2,147,483,647)
+    final validCategories = _categories.where((c) {
+      final cid = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+      return cid > 0 && cid <= 2147483647;
+    }).toList();
+
+    if (validCategories.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: Color(0xFF3B82F6), size: 24),
+              SizedBox(width: 8),
+              Text('Parent Category Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          content: const Text(
+            'You must create at least one Parent Category before adding subcategories.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _tabController.animateTo(0);
+                _showCategoryModalForm();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Create Category'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     int? selectedParentId;
     if (isEdit) {
@@ -536,40 +566,30 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
       selectedParentId = int.tryParse(rawCat?.toString() ?? '');
     }
 
-    if (selectedParentId == null || (availableIds.isNotEmpty && !availableIds.contains(selectedParentId))) {
-      if (_selectedFilterParentCategoryId != null && availableIds.contains(_selectedFilterParentCategoryId)) {
-        selectedParentId = _selectedFilterParentCategoryId;
-      } else if (availableIds.isNotEmpty) {
-        selectedParentId = availableIds.first;
-      }
-    }
-
-    // Build resilient dropdown items list
+    final seenIds = <int>{};
     final List<DropdownMenuItem<int>> dropdownItems = [];
-    for (final c in _categories) {
-      final cid = int.tryParse(c['id']?.toString() ?? '') ?? 0;
-      if (cid > 0) {
+    for (final c in validCategories) {
+      final cid = int.parse(c['id'].toString());
+      if (!seenIds.contains(cid)) {
+        seenIds.add(cid);
         dropdownItems.add(
           DropdownMenuItem<int>(
             value: cid,
-            child: Text(c['name']?.toString() ?? 'Category #$cid'),
+            child: Text(
+              c['name']?.toString() ?? 'Category #$cid',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         );
       }
     }
 
-    // If selectedParentId is still not in dropdownItems, insert it so DropdownButton never fails
-    if (selectedParentId != null && !dropdownItems.any((item) => item.value == selectedParentId)) {
-      final fallbackName = initialSubcategory != null
-          ? (initialSubcategory['category_name']?.toString() ?? 'Category #$selectedParentId')
-          : 'Category #$selectedParentId';
-      dropdownItems.insert(
-        0,
-        DropdownMenuItem<int>(
-          value: selectedParentId,
-          child: Text(fallbackName),
-        ),
-      );
+    if (selectedParentId == null || !seenIds.contains(selectedParentId)) {
+      if (_selectedFilterParentCategoryId != null && seenIds.contains(_selectedFilterParentCategoryId)) {
+        selectedParentId = _selectedFilterParentCategoryId;
+      } else if (seenIds.isNotEmpty) {
+        selectedParentId = seenIds.first;
+      }
     }
 
     final nameCtrl = TextEditingController(text: isEdit ? (initialSubcategory['name']?.toString() ?? '') : '');
@@ -577,6 +597,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
     final imageCtrl = TextEditingController(text: isEdit ? (initialSubcategory['image']?.toString() ?? '') : '');
     bool isUploadingImage = false;
     bool isSaving = false;
+    String? modalError;
 
     showModalBottomSheet(
       context: context,
@@ -622,17 +643,11 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   DropdownButtonFormField<int>(
                     value: selectedParentId,
                     decoration: const InputDecoration(filled: true, fillColor: Color(0xFFF8FAFC)),
-                    items: dropdownItems.isEmpty
-                        ? [
-                            const DropdownMenuItem<int>(
-                              value: 1,
-                              child: Text('Default Category'),
-                            ),
-                          ]
-                        : dropdownItems,
+                    items: dropdownItems,
                     onChanged: (val) {
                       setModalState(() {
                         selectedParentId = val;
+                        modalError = null;
                       });
                     },
                   ),
@@ -644,6 +659,9 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                     onChanged: (val) {
                       if (!isEdit && slugCtrl.text.isEmpty) {
                         slugCtrl.text = val.toLowerCase().replaceAll(' ', '-').replaceAll(RegExp(r'[^a-z0-9\-]'), '');
+                      }
+                      if (modalError != null) {
+                        setModalState(() => modalError = null);
                       }
                     },
                     decoration: const InputDecoration(labelText: 'Subcategory Name *', hintText: 'e.g. Hot Drinks'),
@@ -758,7 +776,31 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                                 ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  if (modalError != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              modalError!,
+                              style: const TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
                   ElevatedButton(
                     onPressed: isSaving
@@ -766,25 +808,33 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                         : () async {
                             final name = nameCtrl.text.trim();
                             if (name.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Please enter a subcategory name.'),
-                                  backgroundColor: AppColors.error,
-                                ),
-                              );
+                              setModalState(() => modalError = 'Please enter a subcategory name.');
                               return;
                             }
 
-                            final int parentIdToSave = selectedParentId ??
-                                (_selectedFilterParentCategoryId ??
-                                    (availableIds.isNotEmpty ? availableIds.first : 1));
+                            if (selectedParentId == null || selectedParentId! <= 0 || selectedParentId! > 2147483647) {
+                              setModalState(() => modalError = 'Please select a valid parent category.');
+                              return;
+                            }
 
-                            setModalState(() => isSaving = true);
+                            final int parentIdToSave = selectedParentId!;
+                            final parentCat = validCategories.firstWhere(
+                              (c) => int.tryParse(c['id']?.toString() ?? '') == parentIdToSave,
+                              orElse: () => <String, dynamic>{},
+                            );
+                            final parentCatName = parentCat['name']?.toString();
+
+                            setModalState(() {
+                              isSaving = true;
+                              modalError = null;
+                            });
                             final messenger = ScaffoldMessenger.of(context);
                             final nav = Navigator.of(context);
 
                             final payload = {
                               'category_id': parentIdToSave,
+                              'categoryId': parentIdToSave,
+                              if (parentCatName != null) 'category_name': parentCatName,
                               'name': name,
                               'slug': slugCtrl.text.trim().isEmpty
                                   ? name.toLowerCase().replaceAll(' ', '-')
@@ -806,15 +856,10 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                             if (!mounted) return;
 
                             if (result['success'] != true) {
-                              setModalState(() => isSaving = false);
-                              final errMsg = result['message']?.toString() ?? 'Failed to save subcategory';
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text('Server Error: $errMsg'),
-                                  backgroundColor: AppColors.error,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                              setModalState(() {
+                                isSaving = false;
+                                modalError = result['message']?.toString() ?? 'Failed to save subcategory';
+                              });
                               return;
                             }
 
@@ -912,7 +957,7 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final item = _categories[index];
-                    final int id = item['id'];
+                    final int id = int.tryParse(item['id']?.toString() ?? '') ?? 0;
                     final String name = item['name'] ?? 'Category';
                     final String slug = item['slug'] ?? name.toLowerCase().replaceAll(' ', '-');
                     final String? image = item['image'];
@@ -1062,10 +1107,11 @@ class _CategorySetupScreenState extends State<CategorySetupScreen> with SingleTi
                             value: null,
                             child: Text('All Parent Categories', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           ),
-                          ..._categories.map((c) {
+                          ..._categories.where((c) => (int.tryParse(c['id']?.toString() ?? '') ?? 0) > 0).map((c) {
+                            final cid = int.parse(c['id'].toString());
                             return DropdownMenuItem<int?>(
-                              value: c['id'] as int,
-                              child: Text(c['name'] ?? 'Category', style: const TextStyle(fontSize: 13)),
+                              value: cid,
+                              child: Text(c['name']?.toString() ?? 'Category #$cid', style: const TextStyle(fontSize: 13)),
                             );
                           }),
                         ],
