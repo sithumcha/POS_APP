@@ -22,7 +22,6 @@ dependencies:
   flutter_local_notifications: ^19.5.0
   permission_handler: ^12.0.3
   flutter_jailbreak_detection: ^1.1.0
-  flutter_windowmanager: ^0.2.0
   mobile_scanner: ^6.0.11
   print_bluetooth_thermal: ^1.2.1
   esc_pos_utils_plus: ^2.0.4

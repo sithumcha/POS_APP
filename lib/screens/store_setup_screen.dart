@@ -422,6 +422,7 @@ class _StoreSetupScreenState extends State<StoreSetupScreen> {
     await _apiService.updateCmsHeader({
       'store_name': storeName,
       'title': storeName,
+      if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
     });
 
     // 3. Update CMS Contact

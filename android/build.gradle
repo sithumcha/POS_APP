@@ -13,6 +13,34 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    if (project.name != "app") {
+        afterEvaluate {
+            if (project.hasProperty('android')) {
+                project.android {
+                    if (namespace == null) {
+                        if (project.name == "flutter_jailbreak_detection") {
+                            namespace "appmire.be.flutterjailbreakdetection"
+                        } else {
+                            namespace project.group ? project.group.toString() : "com.posapp.${project.name.replace('-', '_')}"
+                        }
+                    }
+                    compileSdkVersion 34
+                    compileOptions {
+                        sourceCompatibility = JavaVersion.VERSION_17
+                        targetCompatibility = JavaVersion.VERSION_17
+                    }
+                }
+            }
+        }
+    }
+    tasks.matching { it.name.toLowerCase().contains("kotlin") }.configureEach {
+        try {
+            kotlinOptions.jvmTarget = "17"
+        } catch (Throwable ignored) {}
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }

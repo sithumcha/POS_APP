@@ -759,7 +759,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         // 1. Update user profile cache and server
         await _apiService.updateUserProfile(logoUrl: newUrl);
 
-        // 2. Update store branding scoped to this merchant
+        // 2. Sync to cloud CMS Header so other devices (Web <-> Mobile <-> Mac) immediately reflect it
+        final currentStoreName = (_userData['store_name'] ?? widget.storeName).toString().trim();
+        await _apiService.updateCmsHeader({
+          'store_name': currentStoreName,
+          'title': currentStoreName,
+          'logo_url': newUrl,
+        });
+
+        // 3. Update store branding scoped to this merchant
         final b = await _apiService.getStoreBranding();
         b['logo_url'] = newUrl;
         await _apiService.saveStoreBranding(b);

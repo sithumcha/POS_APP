@@ -1124,13 +1124,41 @@ class ApiService {
       }
     }
 
+    // 4. Cloud Fallback: Sync store logo and branding from CMS content across devices (PC Web <-> Mac <-> Mobile)
+    String address = (user?['address'] ?? '').toString().trim();
+    String phone = (user?['phone'] ?? '').toString().trim();
+    String whatsapp = '';
+    try {
+      final cms = await getCmsContent();
+      final cmsHeader = cms['header'];
+      if (cmsHeader is Map) {
+        final cmsLogo = (cmsHeader['logo_url'] ?? '').toString().trim();
+        if (logoUrl.isEmpty && cmsLogo.isNotEmpty && !cmsLogo.endsWith('/uploads/logo.png')) {
+          logoUrl = cmsLogo;
+        }
+        final cmsStore = (cmsHeader['store_name'] ?? cmsHeader['title'] ?? '').toString().trim();
+        if (storeName.isEmpty && cmsStore.isNotEmpty && cmsStore != 'Admin Store' && cmsStore != 'User Store') {
+          storeName = cmsStore;
+        }
+      }
+      if (address.isEmpty && cms['contact'] is Map) {
+        address = (cms['contact']['address'] ?? '').toString().trim();
+      }
+      if (phone.isEmpty && cms['contact'] is Map) {
+        phone = (cms['contact']['phone'] ?? '').toString().trim();
+      }
+      if (cms['whatsapp'] is Map) {
+        whatsapp = (cms['whatsapp']['whatsapp_number'] ?? cms['whatsapp']['phoneNumber'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+
     final branding = {
       'store_name': (storeName == 'Admin Store' || storeName == 'User Store') ? '' : storeName,
       'logo_url': logoUrl, // Strictly this merchant's logo! Does not leak other admins' photos.
-      'address': (user?['address'] ?? '').toString().trim(),
-      'phone': (user?['phone'] ?? '').toString().trim(),
+      'address': address,
+      'phone': phone,
       'email': (user?['email'] ?? '').toString().trim(),
-      'whatsapp': '',
+      'whatsapp': whatsapp,
     };
 
     if (branding['store_name']!.isNotEmpty || branding['logo_url']!.isNotEmpty) {

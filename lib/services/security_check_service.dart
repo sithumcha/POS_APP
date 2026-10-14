@@ -2,12 +2,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
-import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 
 /// Production-Grade Mobile Device Security & Integrity Guard
 /// Handles Root / Jailbreak detection, developer mode risks,
 /// and prevents screen capture / screen recording on POS terminals.
 class SecurityCheckService {
+  static const MethodChannel _securityChannel = MethodChannel('com.posapp.pos_app/security');
+
   /// Verify device integrity at startup.
   /// Returns `true` if safe to proceed, or `false` if rooted/compromised.
   static Future<bool> verifyDeviceIntegrity() async {
@@ -28,7 +29,7 @@ class SecurityCheckService {
 
         // 3. Prevent Screenshots & Screen Recording on Android POS devices
         if (Platform.isAndroid) {
-          await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+          await setScreenProtection(true);
           debugPrint('🛡️ SECURITY: Android FLAG_SECURE screen protection activated.');
         }
       }
@@ -48,11 +49,7 @@ class SecurityCheckService {
   static Future<void> setScreenProtection(bool enable) async {
     if (kIsWeb || !Platform.isAndroid) return;
     try {
-      if (enable) {
-        await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
-      } else {
-        await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-      }
+      await _securityChannel.invokeMethod('setSecure', {'enable': enable});
     } catch (_) {}
   }
 }
